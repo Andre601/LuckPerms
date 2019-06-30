@@ -33,8 +33,6 @@ import java.util.Map;
 
 /**
  * Holds cached permission lookup data for a specific set of contexts.
- *
- * @since 2.13
  */
 public interface CachedPermissionData extends CachedData {
 

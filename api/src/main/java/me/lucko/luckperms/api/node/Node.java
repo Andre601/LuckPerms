@@ -88,8 +88,6 @@ import java.util.stream.Stream;
  * </ul>
  *
  * <p>The core node state must be immutable in all implementations.</p>
- *
- * @since 2.6
  */
 public interface Node {
 
@@ -98,7 +96,6 @@ public interface Node {
      *
      * @param key
      * @return
-     * @since 5.0
      */
     static @NonNull NodeBuilder builder(@NonNull String key) {
         return LuckPermsProvider.get().getNodeBuilderRegistry().forKey(key);
@@ -108,7 +105,6 @@ public interface Node {
      * TODO
      *
      * @return
-     * @since 5.0
      */
     @NonNull String getKey();
 
@@ -136,7 +132,6 @@ public interface Node {
      * Gets if this node applies globally, and therefore has no specific context.
      *
      * @return true if this node applies globally, and has no specific context
-     * @since 3.1
      */
     boolean appliesGlobally();
 
@@ -145,7 +140,6 @@ public interface Node {
      *
      * @param contextSet the context set
      * @return true if the node should apply
-     * @since 2.13
      */
     boolean shouldApplyWithContext(@NonNull ContextSet contextSet);
 
@@ -196,7 +190,6 @@ public interface Node {
      * @param key the key
      * @param <T> the {@link NodeMetadata} type
      * @return the data, if present
-     * @since 5.0
      */
     <T extends NodeMetadata> Optional<T> getMetadata(NodeMetadataKey<T> key);
 
@@ -208,7 +201,6 @@ public interface Node {
      * @param <T> the {@link NodeMetadata} type
      * @return the data
      * @throws IllegalStateException if data isn't present
-     * @since 5.0
      */
     default <T extends NodeMetadata> T metadata(NodeMetadataKey<T> key) throws IllegalStateException {
         return getMetadata(key).orElseThrow(() -> new IllegalStateException("Node '" + getKey() + "' does not have '" + key.name() + "' attached."));
@@ -231,7 +223,6 @@ public interface Node {
      * @param other             the other node
      * @param equalityPredicate the predicate
      * @return true if this node is considered equal
-     * @since 4.1
      */
     boolean equals(@NonNull Node other, @NonNull NodeEqualityPredicate equalityPredicate);
 
@@ -239,7 +230,6 @@ public interface Node {
      * TODO
      *
      * @return
-     * @since 5.0
      */
     @NonNull NodeBuilder<?, ?> toBuilder();
 

@@ -36,8 +36,6 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 /**
  * A sub-type of {@link Node} used to mark that the holder of the node should inherit
  * from another group.
- *
- * @since 4.2
  */
 public interface InheritanceNode extends ScopedNode<InheritanceNode, InheritanceNode.Builder> {
 

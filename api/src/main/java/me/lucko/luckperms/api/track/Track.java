@@ -95,7 +95,6 @@ public interface Track {
      * @param user       the user to promote
      * @param contextSet the contexts to promote the user in
      * @return the result of the action
-     * @since 4.2
      */
     @NonNull PromotionResult promote(@NonNull User user, @NonNull ContextSet contextSet);
 
@@ -105,7 +104,6 @@ public interface Track {
      * @param user       the user to demote
      * @param contextSet the contexts to demote the user in
      * @return the result of the action
-     * @since 4.2
      */
     @NonNull DemotionResult demote(@NonNull User user, @NonNull ContextSet contextSet);
 

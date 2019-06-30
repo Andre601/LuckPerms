@@ -127,7 +127,6 @@ public interface NodeBuilder<N extends ScopedNode<N, B>, B extends NodeBuilder<N
      * @return the builder
      * @see ContextSet
      * @see Node#getContexts()
-     * @since 4.2
      */
     @NonNull B withContext(@NonNull ContextSet contextSet);
 

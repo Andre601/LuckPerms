@@ -36,8 +36,6 @@ import java.util.SortedMap;
 
 /**
  * Holds cached meta lookup data for a specific set of contexts.
- *
- * @since 2.13
  */
 public interface CachedMetaData extends CachedData {
 
@@ -90,7 +88,6 @@ public interface CachedMetaData extends CachedData {
      * Gets the definition used for the prefix stack
      *
      * @return the definition used for the prefix stack
-     * @since 3.2
      */
     @NonNull MetaStackDefinition getPrefixStackDefinition();
 
@@ -98,7 +95,6 @@ public interface CachedMetaData extends CachedData {
      * Gets the definition used for the suffix stack
      *
      * @return the definition used for the suffix stack
-     * @since 3.2
      */
     @NonNull MetaStackDefinition getSuffixStackDefinition();
 

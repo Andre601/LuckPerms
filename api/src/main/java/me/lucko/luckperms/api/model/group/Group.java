@@ -54,7 +54,6 @@ public interface Group extends PermissionHolder {
      * {@link #getName() actual name}.</p>
      *
      * @return the display name
-     * @since 4.3
      */
     @Nullable String getDisplayName();
 
@@ -66,7 +65,6 @@ public interface Group extends PermissionHolder {
      *
      * @param contextSet the contexts to lookup in
      * @return the display name
-     * @since 4.3
      */
     @Nullable String getDisplayName(@NonNull ContextSet contextSet);
 
@@ -74,7 +72,6 @@ public interface Group extends PermissionHolder {
      * Gets the weight of this group, if present.
      *
      * @return the group weight
-     * @since 2.17
      */
     @NonNull OptionalInt getWeight();
 

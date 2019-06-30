@@ -31,8 +31,6 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 
 /**
  * Holds cached lookup data for a given set of query options.
- *
- * @since 4.1
  */
 public interface CachedData {
 

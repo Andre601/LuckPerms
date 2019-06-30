@@ -49,8 +49,6 @@ import java.util.function.Consumer;
  * <strong>not</strong> be called on the main server thread. If you need to use
  * the result of these operations on the main server thread, register a
  * callback using {@link CompletableFuture#thenAcceptAsync(Consumer, Executor)}.</p>
- *
- * @since 4.0
  */
 public interface GroupManager {
 
@@ -63,7 +61,6 @@ public interface GroupManager {
      * @param name the name of the group
      * @return the resultant group
      * @throws NullPointerException if the name is null
-     * @since 4.1
      */
     @NonNull CompletableFuture<Group> createAndLoadGroup(@NonNull String name);
 
@@ -76,7 +73,6 @@ public interface GroupManager {
      * @param name the name of the group
      * @return the resultant group
      * @throws NullPointerException if the name is null
-     * @since 4.1
      */
     @NonNull CompletableFuture<Optional<Group>> loadGroup(@NonNull String name);
 
@@ -89,7 +85,6 @@ public interface GroupManager {
      * @return a future to encapsulate the operation.
      * @throws NullPointerException  if group is null
      * @throws IllegalStateException if the group instance was not obtained from LuckPerms.
-     * @since 4.1
      */
     @NonNull CompletableFuture<Void> saveGroup(@NonNull Group group);
 
@@ -100,7 +95,6 @@ public interface GroupManager {
      * @return a future to encapsulate the operation.
      * @throws NullPointerException  if group is null
      * @throws IllegalStateException if the group instance was not obtained from LuckPerms.
-     * @since 4.1
      */
     @NonNull CompletableFuture<Void> deleteGroup(@NonNull Group group);
 
@@ -108,7 +102,6 @@ public interface GroupManager {
      * Loads all groups into memory.
      *
      * @return a future to encapsulate the operation.
-     * @since 4.1
      */
     @NonNull CompletableFuture<Void> loadAllGroups();
 
@@ -118,7 +111,6 @@ public interface GroupManager {
      * @param permission the permission to search for
      * @return a list of held permissions, or null if the operation failed
      * @throws NullPointerException if the permission is null
-     * @since 4.2
      */
     @NonNull CompletableFuture<List<HeldNode<String>>> getWithPermission(@NonNull String permission);
 

@@ -39,8 +39,6 @@ import java.util.UUID;
  * You can add to the log using the {@link ActionLogger}, and then request an updated copy.</p>
  *
  * <p>All methods are thread safe, and return immutable and thread safe collections.</p>
- *
- * @since 5.0
  */
 public interface ActionLog {
 

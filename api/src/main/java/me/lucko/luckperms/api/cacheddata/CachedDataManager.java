@@ -38,8 +38,6 @@ import java.util.concurrent.CompletableFuture;
  * <p>All calls will account for inheritance, as well as any default data
  * provided by the platform. This calls are heavily cached and are therefore
  * fast.</p>
- *
- * @since 4.0
  */
 public interface CachedDataManager {
 
@@ -78,8 +76,6 @@ public interface CachedDataManager {
     /**
      * Invalidates all cached {@link CachedPermissionData} and {@link CachedMetaData}
      * instances.
-     *
-     * @since 5.0
      */
     void invalidate();
 

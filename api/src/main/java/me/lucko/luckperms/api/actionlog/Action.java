@@ -35,8 +35,6 @@ import java.util.UUID;
 
 /**
  * Represents a logged action.
- *
- * @since 5.0
  */
 public interface Action extends Comparable<Action> {
 
