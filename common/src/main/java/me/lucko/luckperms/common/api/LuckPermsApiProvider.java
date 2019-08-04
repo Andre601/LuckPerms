@@ -28,7 +28,6 @@ package me.lucko.luckperms.common.api;
 import me.lucko.luckperms.api.LuckPerms;
 import me.lucko.luckperms.api.actionlog.ActionLogger;
 import me.lucko.luckperms.api.context.ContextManager;
-import me.lucko.luckperms.api.context.ContextSetFactory;
 import me.lucko.luckperms.api.event.EventBus;
 import me.lucko.luckperms.api.messaging.MessagingService;
 import me.lucko.luckperms.api.messenger.MessengerProvider;
@@ -36,16 +35,16 @@ import me.lucko.luckperms.api.metastacking.MetaStackFactory;
 import me.lucko.luckperms.api.model.group.GroupManager;
 import me.lucko.luckperms.api.model.user.UserManager;
 import me.lucko.luckperms.api.node.NodeBuilderRegistry;
-import me.lucko.luckperms.api.platform.PlatformInfo;
+import me.lucko.luckperms.api.platform.Platform;
+import me.lucko.luckperms.api.platform.PluginMetadata;
 import me.lucko.luckperms.api.track.TrackManager;
 import me.lucko.luckperms.common.api.implementation.ApiActionLogger;
 import me.lucko.luckperms.common.api.implementation.ApiContextManager;
-import me.lucko.luckperms.common.api.implementation.ApiContextSetFactory;
 import me.lucko.luckperms.common.api.implementation.ApiGroupManager;
 import me.lucko.luckperms.common.api.implementation.ApiMessagingService;
 import me.lucko.luckperms.common.api.implementation.ApiMetaStackFactory;
 import me.lucko.luckperms.common.api.implementation.ApiNodeBuilderRegistry;
-import me.lucko.luckperms.common.api.implementation.ApiPlatformInfo;
+import me.lucko.luckperms.common.api.implementation.ApiPlatform;
 import me.lucko.luckperms.common.api.implementation.ApiTrackManager;
 import me.lucko.luckperms.common.api.implementation.ApiUserManager;
 import me.lucko.luckperms.common.config.ConfigKeys;
@@ -65,7 +64,7 @@ public class LuckPermsApiProvider implements LuckPerms {
 
     private final LuckPermsPlugin plugin;
 
-    private final PlatformInfo platformInfo;
+    private final ApiPlatform platform;
     private final UserManager userManager;
     private final GroupManager groupManager;
     private final TrackManager trackManager;
@@ -76,7 +75,7 @@ public class LuckPermsApiProvider implements LuckPerms {
     public LuckPermsApiProvider(LuckPermsPlugin plugin) {
         this.plugin = plugin;
 
-        this.platformInfo = new ApiPlatformInfo(plugin);
+        this.platform = new ApiPlatform(plugin);
         this.userManager = new ApiUserManager(plugin, plugin.getUserManager());
         this.groupManager = new ApiGroupManager(plugin, plugin.getGroupManager());
         this.trackManager = new ApiTrackManager(plugin, plugin.getTrackManager());
@@ -91,13 +90,13 @@ public class LuckPermsApiProvider implements LuckPerms {
     }
 
     @Override
-    public ContextSetFactory getContextSetFactory() {
-        return ApiContextSetFactory.INSTANCE;
+    public @NonNull Platform getPlatform() {
+        return this.platform;
     }
 
     @Override
-    public @NonNull PlatformInfo getPlatformInfo() {
-        return this.platformInfo;
+    public @NonNull PluginMetadata getPluginMetadata() {
+        return this.platform;
     }
 
     @Override

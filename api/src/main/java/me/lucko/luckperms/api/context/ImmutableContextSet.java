@@ -44,7 +44,7 @@ public interface ImmutableContextSet extends ContextSet {
      * @return a new ImmutableContextSet builder
      */
     static @NonNull Builder builder() {
-        return LuckPermsProvider.get().getContextSetFactory().immutableBuilder();
+        return LuckPermsProvider.get().getContextManager().getContextSetFactory().immutableBuilder();
     }
 
     /**
@@ -56,7 +56,7 @@ public interface ImmutableContextSet extends ContextSet {
      * @throws NullPointerException if key or value is null
      */
     static @NonNull ImmutableContextSet of(@NonNull String key, @NonNull String value) {
-        return LuckPermsProvider.get().getContextSetFactory().immutableOf(key, value);
+        return LuckPermsProvider.get().getContextManager().getContextSetFactory().immutableOf(key, value);
     }
 
     /**
@@ -70,7 +70,7 @@ public interface ImmutableContextSet extends ContextSet {
      * @throws NullPointerException if any of the keys or values are null
      */
     static @NonNull ImmutableContextSet of(@NonNull String key1, @NonNull String value1, @NonNull String key2, @NonNull String value2) {
-        return LuckPermsProvider.get().getContextSetFactory().immutableOf(key1, value1, key2, value2);
+        return LuckPermsProvider.get().getContextManager().getContextSetFactory().immutableOf(key1, value1, key2, value2);
     }
 
     /**
@@ -108,7 +108,7 @@ public interface ImmutableContextSet extends ContextSet {
      * @return an empty ImmutableContextSet
      */
     static @NonNull ImmutableContextSet empty() {
-        return LuckPermsProvider.get().getContextSetFactory().immutableEmpty();
+        return LuckPermsProvider.get().getContextManager().getContextSetFactory().immutableEmpty();
     }
 
     /**

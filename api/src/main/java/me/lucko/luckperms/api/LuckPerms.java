@@ -28,7 +28,6 @@ package me.lucko.luckperms.api;
 import me.lucko.luckperms.api.actionlog.ActionLogger;
 import me.lucko.luckperms.api.context.ContextCalculator;
 import me.lucko.luckperms.api.context.ContextManager;
-import me.lucko.luckperms.api.context.ContextSetFactory;
 import me.lucko.luckperms.api.event.EventBus;
 import me.lucko.luckperms.api.messaging.MessagingService;
 import me.lucko.luckperms.api.messenger.MessengerProvider;
@@ -40,7 +39,8 @@ import me.lucko.luckperms.api.model.group.GroupManager;
 import me.lucko.luckperms.api.model.user.User;
 import me.lucko.luckperms.api.model.user.UserManager;
 import me.lucko.luckperms.api.node.NodeBuilderRegistry;
-import me.lucko.luckperms.api.platform.PlatformInfo;
+import me.lucko.luckperms.api.platform.Platform;
+import me.lucko.luckperms.api.platform.PluginMetadata;
 import me.lucko.luckperms.api.track.Track;
 import me.lucko.luckperms.api.track.TrackManager;
 
@@ -53,34 +53,34 @@ import java.util.concurrent.CompletableFuture;
 /**
  * The LuckPerms API.
  *
- * <p>This interface is the base of the entire API package. All API functions
- * are accessed via this interface.</p>
+ * <p>The API allows other plugins on the server to read and modify LuckPerms
+ * data, change behaviour of the plugin, listen to certain events, and integrate
+ * LuckPerms into other plugins and systems.</p>
  *
- * <p>An instance can be obtained via {@link LuckPermsProvider#get()}, or the platforms
- * Services Manager.</p>
+ * <p>This interface represents the base of the API package. All functions are
+ * accessed via this interface.</p>
+ *
+ * <p>To start using the API, you need to obtain an instance of this interface.
+ * These are registered by the LuckPerms plugin to the platforms Services
+ * Manager. This is the preferred method for obtaining an instance.</p>
+ *
+ * <p>For ease of use, and for platforms without a Service Manager, an instance
+ * can also be obtained from the static singleton accessor in
+ * {@link LuckPermsProvider}.</p>
  */
 public interface LuckPerms {
 
     /**
-     * TODO
+     * Gets the name of this server.
      *
-     * @return
-     */
-    String getServerName();
-
-    /**
-     * TODO
+     * <p>This is defined in the LuckPerms configuration file, and is used for
+     * server specific permission handling.</p>
      *
-     * @return
-     */
-    ContextSetFactory getContextSetFactory();
-
-    /**
-     * Gets information about the platform LuckPerms is running on.
+     * <p>The default server name is "global".</p>
      *
-     * @return the platform info
+     * @return the server name
      */
-    @NonNull PlatformInfo getPlatformInfo();
+    @NonNull String getServerName();
 
     /**
      * Gets the {@link UserManager}, responsible for managing
@@ -116,17 +116,20 @@ public interface LuckPerms {
     @NonNull TrackManager getTrackManager();
 
     /**
-     * Schedules the execution of an update task, and returns an encapsulation
-     * of the task as a {@link CompletableFuture}.
+     * Gets the {@link Platform}, which represents the server platform the
+     * plugin is running on.
      *
-     * <p>The exact actions performed in an update task remains an
-     * implementation detail of the plugin, however, as a minimum, it is
-     * expected to perform a full reload of user, group and track data, and
-     * ensure that any changes are fully applied and propagated.</p>
-     *
-     * @return a future
+     * @return the platform
      */
-    @NonNull CompletableFuture<Void> runUpdateTask();
+    @NonNull Platform getPlatform();
+
+    /**
+     * Gets the {@link PluginMetadata}, responsible for providing metadata about
+     * the LuckPerms plugin currently running.
+     *
+     * @return the plugin metadata
+     */
+    @NonNull PluginMetadata getPluginMetadata();
 
     /**
      * Gets the {@link EventBus}, used for subscribing to internal LuckPerms
@@ -137,55 +140,31 @@ public interface LuckPerms {
     @NonNull EventBus getEventBus();
 
     /**
-     * Gets the {@link MessagingService}, if present.
-     *
-     * <p>The MessagingService is used to dispatch updates throughout a network
-     * of servers running the plugin.</p>
+     * Gets the {@link MessagingService}, used to dispatch updates throughout a
+     * network of servers running the plugin.
      *
      * <p>Not all instances of LuckPerms will have a messaging service setup and
-     * configured, but it is recommended that all users of the API account for
-     * and make use of this.</p>
+     * configured.</p>
      *
      * @return the messaging service instance, if present.
      */
     @NonNull Optional<MessagingService> getMessagingService();
 
     /**
-     * Registers a {@link MessengerProvider} for use by the platform.
-     *
-     * <p>Note that the mere action of registering a provider doesn't
-     * necessarily mean that it will be used.</p>
-     *
-     * @param messengerProvider the messenger provider.
-     */
-    void registerMessengerProvider(@NonNull MessengerProvider messengerProvider);
-
-    /**
-     * Gets the {@link ActionLogger}.
-     *
-     * <p>The action logger is responsible for saving and broadcasting defined
-     * actions occurring on the platform.</p>
+     * Gets the {@link ActionLogger}, responsible for saving and broadcasting
+     * defined actions occurring on the platform.
      *
      * @return the action logger
      */
     @NonNull ActionLogger getActionLogger();
 
     /**
-     * Gets the {@link ContextManager}.
-     *
-     * <p>The context manager manages {@link ContextCalculator}s, and calculates
-     * applicable contexts for a given type.</p>
+     * Gets the {@link ContextManager}, responsible for managing
+     * {@link ContextCalculator}s, and calculating applicable contexts.</p>
      *
      * @return the context manager
      */
     @NonNull ContextManager getContextManager();
-
-    /**
-     * Gets a {@link Collection} of all known permission strings.
-     *
-     * @return a collection of the known permissions
-     */
-    @NonNull Collection<String> getKnownPermissions();
 
     /**
      * Gets the {@link NodeBuilderRegistry}.
@@ -204,5 +183,35 @@ public interface LuckPerms {
      * @return the meta stack factory
      */
     @NonNull MetaStackFactory getMetaStackFactory();
+
+    /**
+     * Schedules the execution of an update task, and returns an encapsulation
+     * of the task as a {@link CompletableFuture}.
+     *
+     * <p>The exact actions performed in an update task remains an
+     * implementation detail of the plugin, however, as a minimum, it is
+     * expected to perform a full reload of user, group and track data, and
+     * ensure that any changes are fully applied and propagated.</p>
+     *
+     * @return a future
+     */
+    @NonNull CompletableFuture<Void> runUpdateTask();
+
+    /**
+     * Registers a {@link MessengerProvider} for use by the platform.
+     *
+     * <p>Note that the mere action of registering a provider doesn't
+     * necessarily mean that it will be used.</p>
+     *
+     * @param messengerProvider the messenger provider.
+     */
+    void registerMessengerProvider(@NonNull MessengerProvider messengerProvider);
+
+    /**
+     * Gets a {@link Collection} of all known permission strings.
+     *
+     * @return a collection of the known permissions
+     */
+    @NonNull Collection<String> getKnownPermissions();
 
 }

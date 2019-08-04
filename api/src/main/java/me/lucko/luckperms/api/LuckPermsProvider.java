@@ -28,16 +28,16 @@ package me.lucko.luckperms.api;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 /**
- * Provides static access to the {@link LuckPerms} instance.
+ * Provides static access to the {@link LuckPerms} service.
  *
- * <p>Ideally, the ServiceManager for the platform should be used to obtain an instance,
- * however, this provider can be used if you need static access.</p>
+ * <p>Ideally, the ServiceManager for the platform should be used to obtain an
+ * instance, however, this provider can be used if you need static access.</p>
  */
 public final class LuckPermsProvider {
     private static LuckPerms instance = null;
 
     /**
-     * Gets an instance of the {@link LuckPerms},
+     * Gets an instance of the {@link LuckPerms} service,
      * throwing {@link IllegalStateException} if an instance is not yet loaded.
      *
      * <p>Will never return null.</p>
@@ -47,7 +47,7 @@ public final class LuckPermsProvider {
      */
     public static @NonNull LuckPerms get() {
         if (instance == null) {
-            throw new IllegalStateException("API is not loaded.");
+            throw new IllegalStateException("The LuckPerms API is not loaded.");
         }
         return instance;
     }

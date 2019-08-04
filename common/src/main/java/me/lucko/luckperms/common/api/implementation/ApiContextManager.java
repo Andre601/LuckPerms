@@ -26,6 +26,7 @@
 package me.lucko.luckperms.common.api.implementation;
 
 import me.lucko.luckperms.api.context.ContextCalculator;
+import me.lucko.luckperms.api.context.ContextSetFactory;
 import me.lucko.luckperms.api.context.ImmutableContextSet;
 import me.lucko.luckperms.api.model.user.User;
 import me.lucko.luckperms.api.query.QueryMode;
@@ -119,6 +120,11 @@ public class ApiContextManager implements me.lucko.luckperms.api.context.Context
     public void unregisterCalculator(@NonNull ContextCalculator<?> calculator) {
         Objects.requireNonNull(calculator, "calculator");
         this.handle.unregisterCalculator(calculator);
+    }
+
+    @Override
+    public @NonNull ContextSetFactory getContextSetFactory() {
+        return ApiContextSetFactory.INSTANCE;
     }
 
     @Override

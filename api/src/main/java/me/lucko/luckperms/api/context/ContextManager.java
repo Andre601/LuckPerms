@@ -162,6 +162,14 @@ public interface ContextManager {
     void unregisterCalculator(@NonNull ContextCalculator<?> calculator);
 
     /**
+     * Gets the {@link ContextSetFactory}, responsible for creating
+     * {@link ContextSet} instances.
+     *
+     * @return the context set factory
+     */
+    @NonNull ContextSetFactory getContextSetFactory();
+
+    /**
      * Invalidates the lookup cache for a given subject
      *
      * @param subject the subject

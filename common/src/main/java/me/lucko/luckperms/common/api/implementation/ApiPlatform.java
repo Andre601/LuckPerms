@@ -23,51 +23,48 @@
  *  SOFTWARE.
  */
 
-package me.lucko.luckperms.api.platform;
+package me.lucko.luckperms.common.api.implementation;
+
+import me.lucko.luckperms.api.platform.Platform;
+import me.lucko.luckperms.api.platform.PlatformType;
+import me.lucko.luckperms.api.platform.PluginMetadata;
+import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 
 import org.checkerframework.checker.nullness.qual.NonNull;
 
+import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Provides information about the platform LuckPerms is running on.
- */
-public interface PlatformInfo {
+public class ApiPlatform implements Platform, PluginMetadata {
+    private final LuckPermsPlugin plugin;
 
-    /**
-     * Gets the type of platform LuckPerms is running on
-     *
-     * @return the type of platform LuckPerms is running on
-     */
-    @NonNull PlatformType getType();
+    public ApiPlatform(LuckPermsPlugin plugin) {
+        this.plugin = plugin;
+    }
 
-    /**
-     * Gets the plugin version
-     *
-     * @return the version of the plugin running on the platform
-     */
-    @NonNull String getVersion();
+    @Override
+    public @NonNull String getVersion() {
+        return this.plugin.getBootstrap().getVersion();
+    }
 
-    /**
-     * Gets the API version
-     *
-     * @return the version of the API running on the platform
-     */
-    double getApiVersion();
+    @Override
+    public @NonNull String getApiVersion() {
+        return "5.0";
+    }
 
-    /**
-     * Gets the unique players which have connected to the server since it started.
-     *
-     * @return the unique connections
-     */
-    @NonNull Set<UUID> getUniqueConnections();
+    @Override
+    public @NonNull PlatformType getType() {
+        return this.plugin.getBootstrap().getType();
+    }
 
-    /**
-     * Gets the time when the plugin first started in milliseconds.
-     *
-     * @return the enable time
-     */
-    long getStartTime();
+    @Override
+    public @NonNull Set<UUID> getUniqueConnections() {
+        return Collections.unmodifiableSet(this.plugin.getConnectionListener().getUniqueConnections());
+    }
 
+    @Override
+    public long getStartTime() {
+        return this.plugin.getBootstrap().getStartupTime();
+    }
 }

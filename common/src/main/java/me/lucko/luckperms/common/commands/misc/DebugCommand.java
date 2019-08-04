@@ -58,7 +58,6 @@ import net.kyori.text.event.ClickEvent;
 import net.kyori.text.event.HoverEvent;
 import net.kyori.text.format.TextColor;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -107,7 +106,7 @@ public class DebugCommand extends SingleCommand {
         return new JObject()
                 .add("type", plugin.getBootstrap().getType().name())
                 .add("version", new JObject()
-                        .add("api", String.valueOf(plugin.getApiProvider().getPlatformInfo().getApiVersion()))
+                        .add("api", String.valueOf(plugin.getApiProvider().getPlatform().getApiVersion()))
                         .add("plugin", plugin.getBootstrap().getVersion())
                 )
                 .add("server", new JObject()

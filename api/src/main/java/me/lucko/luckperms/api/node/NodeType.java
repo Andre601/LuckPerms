@@ -41,64 +41,64 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
- * Represents a type of meta
+ * Represents a type of {@link Node}.
  */
 public interface NodeType<T extends Node> {
 
     /**
-     * TODO etc
+     * Node type for {@link PermissionNode}.
      */
     NodeType<PermissionNode> PERMISSION = new SimpleNodeType<>("PERMISSION", n ->  n instanceof PermissionNode, n -> ((PermissionNode) n));
 
     /**
-     * 
+     * Node type for {@link RegexPermissionNode}.
      */
     NodeType<RegexPermissionNode> REGEX_PERMISSION = new SimpleNodeType<>("REGEX_PERMISSION", n ->  n instanceof RegexPermissionNode, n -> ((RegexPermissionNode) n));
 
     /**
-     * 
+     * Node type for {@link InheritanceNode}.
      */
     NodeType<InheritanceNode> INHERITANCE = new SimpleNodeType<>("INHERITANCE", n ->  n instanceof InheritanceNode, n -> ((InheritanceNode) n));
 
     /**
-     * Represents a prefix
+     * Node type for {@link PrefixNode}.
      */
     NodeType<PrefixNode> PREFIX = new SimpleNodeType<>("PREFIX", n ->  n instanceof PrefixNode, n -> ((PrefixNode) n));
 
     /**
-     * Represents a suffix
+     * Node type for {@link SuffixNode}.
      */
     NodeType<SuffixNode> SUFFIX = new SimpleNodeType<>("SUFFIX", n ->  n instanceof SuffixNode, n -> ((SuffixNode) n));
 
     /**
-     * Represents a meta key-value pair
+     * Node type for {@link MetaNode}.
      */
     NodeType<MetaNode> META = new SimpleNodeType<>("META", n ->  n instanceof MetaNode, n -> ((MetaNode) n));
 
     /**
-     * 
+     * Node type for {@link WeightNode}.
      */
     NodeType<WeightNode> WEIGHT = new SimpleNodeType<>("WEIGHT", n ->  n instanceof WeightNode, n -> ((WeightNode) n));
 
     /**
-     * 
+     * Node type for {@link DisplayNameNode}.
      */
     NodeType<DisplayNameNode> DISPLAY_NAME = new SimpleNodeType<>("DISPLAY_NAME", n ->  n instanceof DisplayNameNode, n -> ((DisplayNameNode) n));
 
     /**
-     * Represents any chat meta type
+     * Node type for {@link ChatMetaNode}.
      */
     NodeType<ChatMetaNode<?, ?>> CHAT_META = new SimpleNodeType<>("CHAT_META", n ->  n instanceof ChatMetaNode<?, ?>, n -> ((ChatMetaNode<?, ?>) n));
 
     /**
-     * Represents any meta type
+     * Node type for {@link ChatMetaNode} or {@link MetaNode}.
      */
     NodeType<Node> META_OR_CHAT_META = new SimpleNodeType<>("META_OR_CHAT_META", n ->  META.matches(n) || CHAT_META.matches(n), Function.identity());
 
     /**
-     * TODO
+     * Gets a name for the node type.
      *
-     * @return
+     * @return a name
      */
     String name();
 
@@ -111,18 +111,26 @@ public interface NodeType<T extends Node> {
     boolean matches(Node node);
 
     /**
-     * TODO
+     * Casts the given {@link Node} to the type defined by the {@link NodeType}.
      *
-     * @param node
-     * @return
+     * <p>An {@link IllegalArgumentException} is thrown if the node to cast does
+     * not {@link #matches(Node) match} the type.</p>
+     *
+     * @param node the node to cast
+     * @return the casted node
+     * @throws IllegalArgumentException if the node to cast does not match the type
      */
     T cast(Node node);
 
     /**
-     * TODO
+     * Attempts to cast the given {@link Node} to the type defined by the
+     * {@link NodeType}.
      *
-     * @param node
-     * @return
+     * <p>Returns an {@link Optional#empty() empty optional} if the node to cast
+     * does not {@link #matches(Node) match} the type.</p>
+     *
+     * @param node the node to cast
+     * @return an optional, possibly containing a casted node
      */
     default Optional<T> tryCast(Node node) {
         Objects.requireNonNull(node, "node");
@@ -134,19 +142,22 @@ public interface NodeType<T extends Node> {
     }
 
     /**
-     * TODO
+     * Returns a {@link Predicate}, returning whether a {@link Node}
+     * {@link #matches(Node) matches} this type.
      *
-     * @return
+     * @return a predicate for the {@link #matches(Node)} method.
      */
     default Predicate<Node> predicate() {
         return this::matches;
     }
 
     /**
-     * TODO
+     * Returns a {@link Predicate}, returning whether a {@link Node}
+     * {@link #matches(Node) matches} this type, and passes the given
+     * {@code and} {@link Predicate}.
      *
-     * @param and
-     * @return
+     * @param and a predicate to AND with the result of the type match check
+     * @return a matching predicate, ANDed with the given predicate parameter
      */
     default Predicate<Node> predicate(Predicate<? super T> and) {
         return node -> matches(node) && and.test(cast(node));

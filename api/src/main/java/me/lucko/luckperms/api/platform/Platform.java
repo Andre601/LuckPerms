@@ -23,47 +23,37 @@
  *  SOFTWARE.
  */
 
-package me.lucko.luckperms.common.api.implementation;
-
-import me.lucko.luckperms.api.platform.PlatformInfo;
-import me.lucko.luckperms.api.platform.PlatformType;
-import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+package me.lucko.luckperms.api.platform;
 
 import org.checkerframework.checker.nullness.qual.NonNull;
 
-import java.util.Collections;
 import java.util.Set;
 import java.util.UUID;
 
-public class ApiPlatformInfo implements PlatformInfo {
-    private final LuckPermsPlugin plugin;
+/**
+ * Provides information about the platform LuckPerms is running on.
+ */
+public interface Platform {
 
-    public ApiPlatformInfo(LuckPermsPlugin plugin) {
-        this.plugin = plugin;
-    }
+    /**
+     * Gets the type of platform LuckPerms is running on
+     *
+     * @return the type of platform LuckPerms is running on
+     */
+    @NonNull PlatformType getType();
 
-    @Override
-    public @NonNull String getVersion() {
-        return this.plugin.getBootstrap().getVersion();
-    }
+    /**
+     * Gets the unique players which have connected to the server since it started.
+     *
+     * @return the unique connections
+     */
+    @NonNull Set<UUID> getUniqueConnections();
 
-    @Override
-    public double getApiVersion() {
-        return 5.0;
-    }
+    /**
+     * Gets the time when the plugin first started in milliseconds.
+     *
+     * @return the enable time
+     */
+    long getStartTime();
 
-    @Override
-    public @NonNull PlatformType getType() {
-        return this.plugin.getBootstrap().getType();
-    }
-
-    @Override
-    public @NonNull Set<UUID> getUniqueConnections() {
-        return Collections.unmodifiableSet(this.plugin.getConnectionListener().getUniqueConnections());
-    }
-
-    @Override
-    public long getStartTime() {
-        return this.plugin.getBootstrap().getStartupTime();
-    }
 }

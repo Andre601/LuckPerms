@@ -26,57 +26,24 @@
 package me.lucko.luckperms.api.platform;
 
 import org.checkerframework.checker.nullness.qual.NonNull;
-import org.checkerframework.checker.nullness.qual.Nullable;
-
-import java.util.UUID;
 
 /**
- * Represents an entity on the server.
- *
- * <p>This does not relate directly to a "Minecraft Entity". The closest
- * comparison is to a "CommandSender" or "CommandSource".</p>
- *
- * <p>The various types of {@link PlatformEntity} are detailed in {@link Type}.</p>
+ * Provides information about the LuckPerms plugin.
  */
-public interface PlatformEntity {
+public interface PluginMetadata {
 
     /**
-     * Gets the unique id of the entity, if it has one.
+     * Gets the plugin version
      *
-     * <p>For players, this returns their uuid assigned by the server.</p>
-     *
-     * @return the uuid of the object, if available
+     * @return the version of the plugin running on the platform
      */
-    @Nullable UUID getUniqueId();
+    @NonNull String getVersion();
 
     /**
-     * Gets the name of the object
+     * Gets the API version
      *
-     * @return the object name
+     * @return the version of the API running on the platform
      */
-    @NonNull String getName();
-
-    /**
-     * Gets the entities type.
-     *
-     * @return the type
-     */
-    @NonNull Type getType();
-
-    /**
-     * The different types of {@link PlatformEntity}
-     */
-    enum Type {
-
-        /**
-         * Represents a player connected to the server
-         */
-        PLAYER,
-
-        /**
-         * Represents the server console
-         */
-        CONSOLE
-    }
+    @NonNull String getApiVersion();
 
 }

@@ -108,7 +108,7 @@ public interface MutableContextSet extends ContextSet {
      * @return a new MutableContextSet
      */
     static @NonNull MutableContextSet create() {
-        return LuckPermsProvider.get().getContextSetFactory().mutable();
+        return LuckPermsProvider.get().getContextManager().getContextSetFactory().mutable();
     }
 
     /**
