@@ -35,7 +35,6 @@ import me.lucko.luckperms.api.query.QueryMode;
 import me.lucko.luckperms.api.query.QueryOptions;
 
 import org.checkerframework.checker.nullness.qual.NonNull;
-import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.Map;
 import java.util.Objects;
@@ -43,7 +42,6 @@ import java.util.Optional;
 import java.util.Set;
 
 public class QueryOptionsImpl implements QueryOptions {
-
     private final QueryMode mode;
     private final ImmutableContextSet context;
     private final byte flags;
@@ -70,7 +68,7 @@ public class QueryOptionsImpl implements QueryOptions {
     }
 
     @Override
-    public @Nullable ImmutableContextSet context() {
+    public @NonNull ImmutableContextSet context() {
         if (this.mode != QueryMode.CONTEXTUAL) {
             throw new IllegalStateException("Mode is not CONTEXTUAL");
         }

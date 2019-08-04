@@ -26,9 +26,17 @@
 package me.lucko.luckperms.api.query;
 
 /**
- * TODO
+ * Represents a key for a custom option defined in {@link QueryOptions}.
  *
- * @param <O>
+ * <p>Option keys are compared using reference equality, the
+ * {@link #equals(Object)} method should not be implemented.</p>
+ *
+ * <p>It is intended that {@link OptionKey}s are created and defined as follows.</p>
+ * <p><blockquote><pre>
+ *     public static final OptionKey<String> SPECIAL_OPTION = new OptionKey<String>(){};
+ * </pre></blockquote></p>
+ *
+ * @param <O> the option type
  */
 public interface OptionKey<O> {
 

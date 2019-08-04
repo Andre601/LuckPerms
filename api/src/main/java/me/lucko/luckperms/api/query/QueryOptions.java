@@ -37,101 +37,117 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * TODO
+ * Represents the parameters for a lookup query.
  */
 public interface QueryOptions {
 
     /**
-     * TODO
+     * Creates a new {@link Builder} for the given {@link QueryMode}.
      *
-     * @param mode
-     * @return
+     * @param mode the query mode
+     * @return a new builder
      */
     static @NonNull Builder builder(@NonNull QueryMode mode) {
         return LuckPermsProvider.get().getContextManager().queryOptionsBuilder(mode);
     }
 
     /**
-     * TODO
+     * Creates a {@link QueryMode#CONTEXTUAL contextual} {@link QueryOptions}
+     * instance with the given context and flags.
      *
-     * @param context
-     * @param flags
-     * @return
+     * @param context the contexts to query in
+     * @param flags the query flags
+     * @return the query options
      */
     static @NonNull QueryOptions contextual(@NonNull ContextSet context, @NonNull Set<Flag> flags) {
         return builder(QueryMode.CONTEXTUAL).context(context).flags(flags).build();
     }
 
     /**
-     * TODO
+     * Creates a {@link QueryMode#NON_CONTEXTUAL non contextual} {@link QueryOptions}
+     * instance with the given flags.
      *
-     * @param flags
-     * @return
+     * @param flags the query flags
+     * @return the query options
      */
     static @NonNull QueryOptions nonContextual(@NonNull Set<Flag> flags) {
         return builder(QueryMode.NON_CONTEXTUAL).flags(flags).build();
     }
 
     /**
-     * TODO
+     * Gets the default {@link QueryMode#NON_CONTEXTUAL non contextual}
+     * query options.
      *
-     * @return
+     * <p>This instance has the default set of flags.</p>
+     *
+     * @return the default non contextual query options
      */
     static @NonNull QueryOptions nonContextual() {
         return DefaultQueryOptions.NON_CONTEXTUAL;
     }
 
     /**
-     * TODO
+     * Gets the default {@link QueryMode#CONTEXTUAL contextual}
+     * query options.
      *
-     * @return
+     * <p>This instance has the default set of flags, and an empty set
+     * of contexts.</p>
+     *
+     * @return the default contextual query options
      */
     static @NonNull QueryOptions defaultContextualOptions() {
         return DefaultQueryOptions.CONTEXTUAL;
     }
 
     /**
-     * TODO
+     * Gets the {@link QueryMode}.
      *
-     * @return
+     * @return the query mode
      */
     @NonNull QueryMode mode();
 
     /**
-     * TODO
+     * Gets the {@link ContextSet context}, if the options are
+     * {@link QueryMode#CONTEXTUAL contextual}.
      *
-     * @return
+     * <p>Throws {@link IllegalStateException} if the {@link #mode() mode} is
+     * {@link QueryMode#NON_CONTEXTUAL}.</p>
+     *
+     * @return the context
      */
-    @Nullable ImmutableContextSet context();
+    @NonNull ImmutableContextSet context();
 
     /**
-     * TODO
+     * Gets if the given {@link Flag} is set.
      *
-     * @param flag
-     * @return
+     * @param flag the flag
+     * @return if the flag is set
      */
     boolean flag(@NonNull Flag flag);
 
     /**
-     * TODO
+     * Gets the {@link Flag}s which are set.
      *
-     * @return
+     * @return the flags
      */
     @NonNull Set<Flag> flags();
 
     /**
-     * TODO
+     * Gets the value assigned to the given {@link OptionKey}.
      *
-     * @param key
-     * @param <O>
-     * @return
+     * <p>Returns an {@link Optional#empty() empty optional} if the option has
+     * not been set.</p>
+     *
+     * @param key the key to lookup
+     * @param <O> the option type
+     * @return the value assigned to the key
      */
     <O> @NonNull Optional<O> option(@NonNull OptionKey<O> key);
 
     /**
-     * TODO
+     * Gets the options which are set.
      *
-     * @return
+     * @return the options
      */
     @NonNull Map<OptionKey<?>, Object> options();
 
@@ -145,64 +161,77 @@ public interface QueryOptions {
     boolean satisfies(@NonNull ContextSet contextSet);
 
     /**
-     * TODO
+     * Converts this {@link QueryOptions} to a mutable builder.
      *
-     * @return
+     * @return a builder, with the same properties already set
      */
     @NonNull Builder toBuilder();
 
     /**
-     * TODO
+     * Builder for {@link QueryOptions}.
      */
     interface Builder {
 
         /**
-         * TODO
+         * Sets the {@link QueryMode}.
          *
-         * @param context
-         * @return
+         * @param mode the mode to set
+         * @return this builder
+         */
+        @NonNull Builder mode(@NonNull QueryMode mode);
+
+        /**
+         * Sets the context.
+         *
+         * <p>Note that this is a set operation, not append. Existing contexts
+         * will be overridden.</p>
+         *
+         * <p>Throws {@link IllegalStateException} if the mode is not
+         * {@link QueryMode#CONTEXTUAL}.</p>
+         *
+         * @param context the context to set
+         * @return this builder
          */
         @NonNull Builder context(@NonNull ContextSet context);
 
         /**
-         * TODO
+         * Sets the value of the given flag.
          *
-         * @param flag
-         * @return
-         */
-        @NonNull Builder flag(@NonNull Flag flag);
-
-        /**
-         * TODO
-         *
-         * @param flag
-         * @param value
-         * @return
+         * @param flag the flag
+         * @param value the value to set
+         * @return this builder
          */
         @NonNull Builder flag(@NonNull Flag flag, boolean value);
 
         /**
-         * TODO
+         * Sets the flags.
          *
-         * @param flags
-         * @return
+         * <p>Note that this is a set operation, not append. Existing flags will
+         * be overridden.</p>
+         *
+         * @param flags the flags
+         * @return this builder
          */
         @NonNull Builder flags(@NonNull Set<Flag> flags);
 
         /**
-         * TODO
+         * Sets the value of the given option.
          *
-         * @param key
-         * @param value
-         * @param <O>
-         * @return
+         * <p>Passing {@code null} in place of a value will clear any existing
+         * value set for the key.</p>
+         *
+         * @param key the option key
+         * @param value the value, or null to clear
+         * @param <O> the option type
+         * @return this builder
          */
         <O> @NonNull Builder option(@NonNull OptionKey<O> key, @Nullable O value);
 
         /**
-         * TODO
+         * Builds a {@link QueryOptions} instance from the properties defined to
+         * the builder.
          *
-         * @return
+         * @return a {@link QueryOptions} instance.
          */
         @NonNull QueryOptions build();
 

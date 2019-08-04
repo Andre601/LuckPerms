@@ -26,7 +26,7 @@
 package me.lucko.luckperms.api.query;
 
 /**
- * TODO
+ * The flags which can be set for a query.
  */
 public enum Flag {
 

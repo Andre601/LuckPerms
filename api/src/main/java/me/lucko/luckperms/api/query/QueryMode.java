@@ -26,17 +26,23 @@
 package me.lucko.luckperms.api.query;
 
 /**
- * TODO
+ * Represents the type of query associated with a given {@link QueryOptions}.
  */
 public enum QueryMode {
 
     /**
-     * TODO
+     * Contextual query.
+     *
+     * <p>The query will use the {@link QueryOptions#context() contexts} defined
+     * in the {@link QueryOptions} to filter which data is applicable.</p>
      */
     CONTEXTUAL,
 
     /**
-     * TODO
+     * Non-contextual query.
+     *
+     * <p>The query will use not use contexts to filter which data is
+     * applicable.</p>
      */
     NON_CONTEXTUAL
 

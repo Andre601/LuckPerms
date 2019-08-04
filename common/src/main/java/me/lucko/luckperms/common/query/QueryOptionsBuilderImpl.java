@@ -42,8 +42,7 @@ import java.util.Objects;
 import java.util.Set;
 
 public class QueryOptionsBuilderImpl implements QueryOptions.Builder {
-    private final QueryMode mode;
-
+    private QueryMode mode;
     private ImmutableContextSet context;
     private byte flags;
     private Set<Flag> flagsSet;
@@ -69,6 +68,17 @@ public class QueryOptionsBuilderImpl implements QueryOptions.Builder {
     }
 
     @Override
+    public QueryOptions.@NonNull Builder mode(@NonNull QueryMode mode) {
+        if (this.mode == mode) {
+            return this;
+        }
+
+        this.mode = mode;
+        this.context = this.mode == QueryMode.CONTEXTUAL ? ImmutableContextSet.empty() : null;
+        return this;
+    }
+
+    @Override
     public QueryOptions.@NonNull Builder context(@NonNull ContextSet context) {
         if (this.mode != QueryMode.CONTEXTUAL) {
             throw new IllegalStateException("Mode is not CONTEXTUAL");
@@ -76,11 +86,6 @@ public class QueryOptionsBuilderImpl implements QueryOptions.Builder {
 
         this.context = Objects.requireNonNull(context, "context").immutableCopy();
         return this;
-    }
-
-    @Override
-    public QueryOptions.@NonNull Builder flag(@NonNull Flag flag) {
-        return flag(flag, true);
     }
 
     @Override
