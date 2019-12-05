@@ -2,7 +2,7 @@
 
 ## About
 We welcome anyone to contribute to the project without judgement of their past, their religion, or similar.  
-To achieve the same for the other collaborators, did we create this Code of Conduct. Please follow it when attempting to collaborate to the project.
+To keep those standarts did we create this Code of Conduct.
 
 ## Types of collaboration
 As "collaboration" do we describe any contribution to the project, being it opening an issue or PR, commenting on issues, PRs, commits or similar or give other feedback through other kinds of media connected to this project.
