@@ -20,7 +20,7 @@ The following behaviours are **not** accepted by us and should be avoided:
 - Publishing sexual content including but not limited to links and images
 - Any other not mentioned conduct which could be seen as inappropriate towards others or the project itself
 
-This is by no means a full list and you may ask for permission to publish something if you're unsure about it violating this Code of Conduct.
+This is by no means a full list and you are welcome to ask a contributor of the project for any advice.
 
 ## Our rights
 We reserve the right to close your issue/PR, delete your comment and may even restrict you on contributing to this project if your contribution is seen as against this Code of Conduct.
