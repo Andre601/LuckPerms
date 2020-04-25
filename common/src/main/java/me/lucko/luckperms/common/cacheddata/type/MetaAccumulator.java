@@ -28,16 +28,17 @@ package me.lucko.luckperms.common.cacheddata.type;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 
-import me.lucko.luckperms.api.ChatMetaType;
-import me.lucko.luckperms.api.LocalizedNode;
-import me.lucko.luckperms.api.nodetype.types.MetaType;
-import me.lucko.luckperms.api.nodetype.types.PrefixType;
-import me.lucko.luckperms.api.nodetype.types.SuffixType;
 import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.metastacking.MetaStack;
 import me.lucko.luckperms.common.metastacking.SimpleMetaStack;
-import me.lucko.luckperms.common.node.model.NodeTypes;
+import me.lucko.luckperms.common.node.types.Weight;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+
+import net.luckperms.api.node.ChatMetaType;
+import net.luckperms.api.node.Node;
+import net.luckperms.api.node.types.MetaNode;
+import net.luckperms.api.node.types.PrefixNode;
+import net.luckperms.api.node.types.SuffixNode;
 
 import java.util.Comparator;
 import java.util.Map;
@@ -77,6 +78,7 @@ public class MetaAccumulator {
     private final SortedMap<Integer, String> prefixes;
     private final SortedMap<Integer, String> suffixes;
     private int weight = 0;
+    private String primaryGroup;
 
     private final MetaStack prefixStack;
     private final MetaStack suffixStack;
@@ -109,8 +111,11 @@ public class MetaAccumulator {
         }
 
         // perform final changes
-        if (!this.meta.containsKey(NodeTypes.WEIGHT_KEY) && this.weight != 0) {
-            this.meta.put(NodeTypes.WEIGHT_KEY, String.valueOf(this.weight));
+        if (!this.meta.containsKey(Weight.NODE_KEY) && this.weight != 0) {
+            this.meta.put(Weight.NODE_KEY, String.valueOf(this.weight));
+        }
+        if (this.primaryGroup != null && !this.meta.containsKey("primarygroup")) {
+            this.meta.put("primarygroup", this.primaryGroup);
         }
 
         this.state.set(State.COMPLETE);
@@ -118,22 +123,25 @@ public class MetaAccumulator {
 
     // accumulate methods
 
-    public void accumulateNode(LocalizedNode n) {
+    public void accumulateNode(Node n) {
         ensureState(State.ACCUMULATING);
+        
+        if (n instanceof MetaNode) {
+            MetaNode mn = (MetaNode) n;
+            this.meta.put(mn.getMetaKey(), mn.getMetaValue());
+        }
 
-        n.getTypeData(MetaType.KEY).ifPresent(metaType ->
-                this.meta.put(metaType.getKey(), metaType.getValue())
-        );
-
-        n.getTypeData(PrefixType.KEY).ifPresent(prefix -> {
-            this.prefixes.putIfAbsent(prefix.getPriority(), prefix.getPrefix());
-            this.prefixStack.accumulateToAll(n);
-        });
-
-        n.getTypeData(SuffixType.KEY).ifPresent(suffix -> {
-            this.suffixes.putIfAbsent(suffix.getPriority(), suffix.getSuffix());
-            this.suffixStack.accumulateToAll(n);
-        });
+        if (n instanceof PrefixNode) {
+            PrefixNode pn = (PrefixNode) n;
+            this.prefixes.putIfAbsent(pn.getPriority(), pn.getMetaValue());
+            this.prefixStack.accumulateToAll(pn);
+        }
+        
+        if (n instanceof SuffixNode) {
+            SuffixNode pn = (SuffixNode) n;
+            this.suffixes.putIfAbsent(pn.getPriority(), pn.getMetaValue());
+            this.suffixStack.accumulateToAll(pn);
+        }
     }
 
     public void accumulateMeta(String key, String value) {
@@ -144,6 +152,11 @@ public class MetaAccumulator {
     public void accumulateWeight(int weight) {
         ensureState(State.ACCUMULATING);
         this.weight = Math.max(this.weight, weight);
+    }
+
+    public void setPrimaryGroup(String primaryGroup) {
+        ensureState(State.ACCUMULATING);
+        this.primaryGroup = primaryGroup;
     }
 
     // read methods
@@ -173,6 +186,11 @@ public class MetaAccumulator {
         return this.weight;
     }
 
+    public String getPrimaryGroup() {
+        ensureState(State.COMPLETE);
+        return this.primaryGroup;
+    }
+
     public MetaStack getPrefixStack() {
         ensureState(State.COMPLETE);
         return this.prefixStack;
@@ -190,6 +208,7 @@ public class MetaAccumulator {
                 "prefixes=" + this.prefixes + ", " +
                 "suffixes=" + this.suffixes + ", " +
                 "weight=" + this.weight + ", " +
+                "primaryGroup=" + this.primaryGroup + ", " +
                 "prefixStack=" + this.prefixStack + ", " +
                 "suffixStack=" + this.suffixStack + ")";
     }

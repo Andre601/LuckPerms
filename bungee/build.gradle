@@ -5,8 +5,8 @@ plugins {
 dependencies {
     compile project(':common')
 
-    compileOnly 'net.md-5:bungeecord-api:1.14-SNAPSHOT'
-    compileOnly 'net.kyori:text-adapter-bungeecord:3.0.2'
+    compileOnly 'net.md-5:bungeecord-api:1.15-SNAPSHOT'
+    compileOnly 'net.kyori:text-adapter-bungeecord:3.0.3'
     compileOnly 'com.imaginarycode.minecraft:RedisBungee:0.4'
 
     // migration plugins
@@ -32,6 +32,7 @@ shadowJar {
     archiveName = "LuckPerms-Bungee-${project.ext.fullVersion}.jar"
 
     dependencies {
+        include(dependency('net.luckperms:.*'))
         include(dependency('me.lucko.luckperms:.*'))
     }
 
@@ -40,6 +41,7 @@ shadowJar {
     relocate 'com.github.benmanes.caffeine', 'me.lucko.luckperms.lib.caffeine'
     relocate 'okio', 'me.lucko.luckperms.lib.okio'
     relocate 'okhttp3', 'me.lucko.luckperms.lib.okhttp3'
+    relocate 'net.bytebuddy', 'me.lucko.luckperms.lib.bytebuddy'
     relocate 'me.lucko.commodore', 'me.lucko.luckperms.lib.commodore'
     relocate 'org.mariadb.jdbc', 'me.lucko.luckperms.lib.mariadb'
     relocate 'com.mysql', 'me.lucko.luckperms.lib.mysql'

@@ -62,6 +62,7 @@ public final class SubjectDataProxy implements SubjectData, ProxiedServiceObject
                 this.ref.resolveLp().thenApply(LPSubject::getTransientSubjectData);
     }
 
+    @SuppressWarnings("rawtypes")
     @Override
     public @NonNull Map<Set<Context>, Map<String, Boolean>> getAllPermissions() {
         return (Map) handle().thenApply(handle -> handle.getAllPermissions().entrySet().stream()
@@ -98,6 +99,7 @@ public final class SubjectDataProxy implements SubjectData, ProxiedServiceObject
         return true;
     }
 
+    @SuppressWarnings("rawtypes")
     @Override
     public @NonNull Map<Set<Context>, List<Subject>> getAllParents() {
         return (Map) handle().thenApply(handle -> handle.getAllParents().entrySet().stream()
@@ -110,6 +112,7 @@ public final class SubjectDataProxy implements SubjectData, ProxiedServiceObject
                 )).join();
     }
 
+    @SuppressWarnings("rawtypes")
     @Override
     public @NonNull List<Subject> getParents(@NonNull Set<Context> contexts) {
         return (List) handle().thenApply(handle -> handle.getParents(CompatibilityUtil.convertContexts(contexts)).stream()
@@ -147,6 +150,7 @@ public final class SubjectDataProxy implements SubjectData, ProxiedServiceObject
         return true;
     }
 
+    @SuppressWarnings("rawtypes")
     @Override
     public @NonNull Map<Set<Context>, Map<String, String>> getAllOptions() {
         return (Map) handle().thenApply(handle -> handle.getAllOptions().entrySet().stream()
@@ -165,11 +169,10 @@ public final class SubjectDataProxy implements SubjectData, ProxiedServiceObject
     public boolean setOption(@NonNull Set<Context> contexts, @NonNull String key, String value) {
         if (value == null) {
             handle().thenCompose(handle -> handle.unsetOption(CompatibilityUtil.convertContexts(contexts), key));
-            return true;
         } else {
             handle().thenCompose(handle -> handle.setOption(CompatibilityUtil.convertContexts(contexts), key, value));
-            return true;
         }
+        return true;
     }
 
     @Override

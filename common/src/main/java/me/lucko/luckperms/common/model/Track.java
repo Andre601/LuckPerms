@@ -27,27 +27,32 @@ package me.lucko.luckperms.common.model;
 
 import com.google.common.collect.ImmutableList;
 
-import me.lucko.luckperms.api.DataMutateResult;
-import me.lucko.luckperms.api.DemotionResult;
-import me.lucko.luckperms.api.Node;
-import me.lucko.luckperms.api.PromotionResult;
-import me.lucko.luckperms.api.context.ContextSet;
 import me.lucko.luckperms.common.api.implementation.ApiTrack;
-import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.model.manager.group.GroupManager;
+import me.lucko.luckperms.common.node.types.Inheritance;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
+
+import net.luckperms.api.context.ContextSet;
+import net.luckperms.api.model.data.DataMutateResult;
+import net.luckperms.api.model.data.DataType;
+import net.luckperms.api.node.Node;
+import net.luckperms.api.node.types.InheritanceNode;
+import net.luckperms.api.track.DemotionResult;
+import net.luckperms.api.track.PromotionResult;
 
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-public final class Track implements Identifiable<String> {
+public final class Track {
 
     /**
      * The name of the track
@@ -63,7 +68,7 @@ public final class Track implements Identifiable<String> {
      */
     private final List<String> groups = Collections.synchronizedList(new ArrayList<>());
 
-    private final ApiTrack apiDelegate = new ApiTrack(this);
+    private final ApiTrack apiProxy = new ApiTrack(this);
 
     public Track(String name, LuckPermsPlugin plugin) {
         this.name = name;
@@ -78,13 +83,8 @@ public final class Track implements Identifiable<String> {
         return this.ioLock;
     }
 
-    public ApiTrack getApiDelegate() {
-        return this.apiDelegate;
-    }
-
-    @Override
-    public String getId() {
-        return this.name.toLowerCase();
+    public ApiTrack getApiProxy() {
+        return this.apiProxy;
     }
 
     /**
@@ -97,6 +97,7 @@ public final class Track implements Identifiable<String> {
     }
 
     public void setGroups(List<String> groups) {
+        Objects.requireNonNull(groups, "groups");
         this.groups.clear();
         this.groups.addAll(groups);
     }
@@ -178,14 +179,14 @@ public final class Track implements Identifiable<String> {
      */
     public DataMutateResult appendGroup(Group group) {
         if (containsGroup(group)) {
-            return DataMutateResult.ALREADY_HAS;
+            return DataMutateResult.FAIL_ALREADY_HAS;
         }
 
         List<String> before = ImmutableList.copyOf(this.groups);
         this.groups.add(group.getName());
         List<String> after = ImmutableList.copyOf(this.groups);
 
-        this.plugin.getEventFactory().handleTrackAddGroup(this, group.getName(), before, after);
+        this.plugin.getEventDispatcher().dispatchTrackAddGroup(this, group.getName(), before, after);
         return DataMutateResult.SUCCESS;
     }
 
@@ -199,14 +200,14 @@ public final class Track implements Identifiable<String> {
      */
     public DataMutateResult insertGroup(Group group, int position) throws IndexOutOfBoundsException {
         if (containsGroup(group)) {
-            return DataMutateResult.ALREADY_HAS;
+            return DataMutateResult.FAIL_ALREADY_HAS;
         }
 
         List<String> before = ImmutableList.copyOf(this.groups);
         this.groups.add(position, group.getName());
         List<String> after = ImmutableList.copyOf(this.groups);
 
-        this.plugin.getEventFactory().handleTrackAddGroup(this, group.getName(), before, after);
+        this.plugin.getEventDispatcher().dispatchTrackAddGroup(this, group.getName(), before, after);
         return DataMutateResult.SUCCESS;
     }
 
@@ -228,14 +229,14 @@ public final class Track implements Identifiable<String> {
      */
     public DataMutateResult removeGroup(String group) {
         if (!containsGroup(group)) {
-            return DataMutateResult.LACKS;
+            return DataMutateResult.FAIL_LACKS;
         }
 
         List<String> before = ImmutableList.copyOf(this.groups);
         this.groups.remove(group);
         List<String> after = ImmutableList.copyOf(this.groups);
 
-        this.plugin.getEventFactory().handleTrackRemoveGroup(this, group, before, after);
+        this.plugin.getEventDispatcher().dispatchTrackRemoveGroup(this, group, before, after);
         return DataMutateResult.SUCCESS;
     }
 
@@ -265,7 +266,7 @@ public final class Track implements Identifiable<String> {
     public void clearGroups() {
         List<String> before = ImmutableList.copyOf(this.groups);
         this.groups.clear();
-        this.plugin.getEventFactory().handleTrackClear(this, before);
+        this.plugin.getEventDispatcher().dispatchTrackClear(this, before);
     }
 
     public PromotionResult promote(User user, ContextSet context, Predicate<String> nextGroupPermissionChecker, @Nullable Sender sender, boolean addToFirst) {
@@ -274,8 +275,7 @@ public final class Track implements Identifiable<String> {
         }
 
         // find all groups that are inherited by the user in the exact contexts given and applicable to this track
-        List<Node> nodes = user.enduringData().immutable().get(context.makeImmutable()).stream()
-                .filter(Node::isGroupNode)
+        List<InheritanceNode> nodes = user.normalData().immutableInheritance().get(context.immutableCopy()).stream()
                 .filter(Node::getValue)
                 .filter(node -> containsGroup(node.getGroupName()))
                 .distinct()
@@ -297,8 +297,8 @@ public final class Track implements Identifiable<String> {
                 return PromotionResults.undefinedFailure();
             }
 
-            user.setPermission(NodeFactory.buildGroupNode(nextGroup.getId()).withExtraContext(context).build());
-            this.plugin.getEventFactory().handleUserPromote(user, this, null, first, sender);
+            user.setNode(DataType.NORMAL, Inheritance.builder(nextGroup.getName()).withContext(context).build(), true);
+            this.plugin.getEventDispatcher().dispatchUserPromote(user, this, null, first, sender);
             return PromotionResults.addedToFirst(first);
         }
 
@@ -306,7 +306,7 @@ public final class Track implements Identifiable<String> {
             return PromotionResults.ambiguousCall();
         }
 
-        Node oldNode = nodes.get(0);
+        InheritanceNode oldNode = nodes.get(0);
         String old = oldNode.getGroupName();
         String next = getNext(old);
 
@@ -323,14 +323,14 @@ public final class Track implements Identifiable<String> {
             return PromotionResults.undefinedFailure();
         }
 
-        user.unsetPermission(oldNode);
-        user.setPermission(NodeFactory.buildGroupNode(nextGroup.getName()).withExtraContext(context).build());
+        user.unsetNode(DataType.NORMAL, oldNode);
+        user.setNode(DataType.NORMAL, Inheritance.builder(nextGroup.getName()).withContext(context).build(), true);
 
-        if (context.isEmpty() && user.getPrimaryGroup().getStoredValue().orElse(NodeFactory.DEFAULT_GROUP_NAME).equalsIgnoreCase(old)) {
+        if (context.isEmpty() && user.getPrimaryGroup().getStoredValue().orElse(GroupManager.DEFAULT_GROUP_NAME).equalsIgnoreCase(old)) {
             user.getPrimaryGroup().setStoredValue(nextGroup.getName());
         }
 
-        this.plugin.getEventFactory().handleUserPromote(user, this, old, nextGroup.getName(), sender);
+        this.plugin.getEventDispatcher().dispatchUserPromote(user, this, old, nextGroup.getName(), sender);
         return PromotionResults.success(old, nextGroup.getName());
     }
 
@@ -340,8 +340,7 @@ public final class Track implements Identifiable<String> {
         }
 
         // find all groups that are inherited by the user in the exact contexts given and applicable to this track
-        List<Node> nodes = user.enduringData().immutable().get(context.makeImmutable()).stream()
-                .filter(Node::isGroupNode)
+        List<InheritanceNode> nodes = user.normalData().immutableInheritance().get(context.immutableCopy()).stream()
                 .filter(Node::getValue)
                 .filter(node -> containsGroup(node.getGroupName()))
                 .distinct()
@@ -355,7 +354,7 @@ public final class Track implements Identifiable<String> {
             return DemotionResults.ambiguousCall();
         }
 
-        Node oldNode = nodes.get(0);
+        InheritanceNode oldNode = nodes.get(0);
         String old = oldNode.getGroupName();
         String previous = getPrevious(old);
 
@@ -368,8 +367,8 @@ public final class Track implements Identifiable<String> {
                 return DemotionResults.removedFromFirst(null);
             }
 
-            user.unsetPermission(oldNode);
-            this.plugin.getEventFactory().handleUserDemote(user, this, old, null, sender);
+            user.unsetNode(DataType.NORMAL, oldNode);
+            this.plugin.getEventDispatcher().dispatchUserDemote(user, this, old, null, sender);
             return DemotionResults.removedFromFirst(old);
         }
 
@@ -378,14 +377,14 @@ public final class Track implements Identifiable<String> {
             return DemotionResults.malformedTrack(previous);
         }
 
-        user.unsetPermission(oldNode);
-        user.setPermission(NodeFactory.buildGroupNode(previousGroup.getName()).withExtraContext(context).build());
+        user.unsetNode(DataType.NORMAL, oldNode);
+        user.setNode(DataType.NORMAL, Inheritance.builder(previousGroup.getName()).withContext(context).build(), true);
 
-        if (context.isEmpty() && user.getPrimaryGroup().getStoredValue().orElse(NodeFactory.DEFAULT_GROUP_NAME).equalsIgnoreCase(old)) {
+        if (context.isEmpty() && user.getPrimaryGroup().getStoredValue().orElse(GroupManager.DEFAULT_GROUP_NAME).equalsIgnoreCase(old)) {
             user.getPrimaryGroup().setStoredValue(previousGroup.getName());
         }
 
-        this.plugin.getEventFactory().handleUserDemote(user, this, old, previousGroup.getName(), sender);
+        this.plugin.getEventDispatcher().dispatchUserDemote(user, this, old, previousGroup.getName(), sender);
         return DemotionResults.success(old, previousGroup.getName());
     }
 

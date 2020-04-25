@@ -35,37 +35,39 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
-import com.mongodb.client.model.UpdateOptions;
+import com.mongodb.client.model.ReplaceOptions;
 
-import me.lucko.luckperms.api.HeldPermission;
-import me.lucko.luckperms.api.LogEntry;
-import me.lucko.luckperms.api.Node;
-import me.lucko.luckperms.api.PlayerSaveResult;
-import me.lucko.luckperms.api.context.ContextSet;
-import me.lucko.luckperms.api.context.ImmutableContextSet;
-import me.lucko.luckperms.api.context.MutableContextSet;
-import me.lucko.luckperms.common.actionlog.ExtendedLogEntry;
 import me.lucko.luckperms.common.actionlog.Log;
+import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.bulkupdate.BulkUpdate;
 import me.lucko.luckperms.common.bulkupdate.comparison.Constraint;
+import me.lucko.luckperms.common.context.contextset.MutableContextSetImpl;
 import me.lucko.luckperms.common.model.Group;
-import me.lucko.luckperms.common.model.NodeMapType;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.model.UserIdentifier;
 import me.lucko.luckperms.common.model.manager.group.GroupManager;
-import me.lucko.luckperms.common.model.manager.track.TrackManager;
-import me.lucko.luckperms.common.node.factory.LegacyNodeFactory;
-import me.lucko.luckperms.common.node.factory.NodeFactory;
-import me.lucko.luckperms.common.node.model.NodeDataContainer;
-import me.lucko.luckperms.common.node.model.NodeHeldPermission;
+import me.lucko.luckperms.common.node.factory.NodeBuilders;
+import me.lucko.luckperms.common.node.model.HeldNodeImpl;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.storage.implementation.StorageImplementation;
 import me.lucko.luckperms.common.storage.misc.PlayerSaveResultImpl;
 import me.lucko.luckperms.common.storage.misc.StorageCredentials;
+import me.lucko.luckperms.common.util.Iterators;
+
+import net.luckperms.api.actionlog.Action;
+import net.luckperms.api.context.Context;
+import net.luckperms.api.context.ContextSet;
+import net.luckperms.api.context.DefaultContextKeys;
+import net.luckperms.api.context.MutableContextSet;
+import net.luckperms.api.model.PlayerSaveResult;
+import net.luckperms.api.model.data.DataType;
+import net.luckperms.api.node.HeldNode;
+import net.luckperms.api.node.Node;
+import net.luckperms.api.node.NodeBuilder;
 
 import org.bson.Document;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -141,7 +143,7 @@ public class MongoStorage implements StorageImplementation {
 
     @Override
     public Map<String, String> getMeta() {
-        Map<String, String> ret = new LinkedHashMap<>();
+        Map<String, String> meta = new LinkedHashMap<>();
         boolean success = true;
 
         long start = System.currentTimeMillis();
@@ -153,29 +155,36 @@ public class MongoStorage implements StorageImplementation {
         long duration = System.currentTimeMillis() - start;
 
         if (success) {
-            ret.put("Ping", "&a" + duration + "ms");
-            ret.put("Connected", "true");
+            meta.put("Ping", "&a" + duration + "ms");
+            meta.put("Connected", "true");
         } else {
-            ret.put("Connected", "false");
+            meta.put("Connected", "false");
         }
 
-        return ret;
+        return meta;
     }
 
     @Override
-    public void logAction(LogEntry entry) {
+    public void logAction(Action entry) {
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "action");
-        Document doc = new Document()
-                .append("timestamp", entry.getTimestamp())
-                .append("actor", entry.getActor())
-                .append("actorName", entry.getActorName())
-                .append("type", Character.toString(entry.getType().getCode()))
-                .append("actedName", entry.getActedName())
-                .append("action", entry.getAction());
 
-        if (entry.getActed().isPresent()) {
-            doc.append("acted", entry.getActed().get());
+        Document doc = new Document()
+                .append("timestamp", entry.getTimestamp().getEpochSecond())
+                .append("source", new Document()
+                        .append("uniqueId", entry.getSource().getUniqueId())
+                        .append("name", entry.getSource().getName())
+                );
+
+        Document target = new Document()
+                .append("type", entry.getTarget().getType().name())
+                .append("name", entry.getTarget().getName());
+
+        if (entry.getTarget().getUniqueId().isPresent()) {
+            target.append("uniqueId", entry.getTarget().getUniqueId().get());
         }
+
+        doc.append("target", target);
+        doc.append("description", entry.getDescription());
 
         c.insertOne(doc);
     }
@@ -188,22 +197,46 @@ public class MongoStorage implements StorageImplementation {
             while (cursor.hasNext()) {
                 Document d = cursor.next();
 
-                UUID actedUuid = null;
-                if (d.containsKey("acted")) {
-                    actedUuid = d.get("acted", UUID.class);
+                if (d.containsKey("source")) {
+                    // new format
+                    Document source = d.get("source", Document.class);
+                    Document target = d.get("target", Document.class);
+
+                    UUID targetUniqueId = null;
+                    if (target.containsKey("uniqueId")) {
+                        targetUniqueId = target.get("uniqueId", UUID.class);
+                    }
+
+                    LoggedAction e = LoggedAction.build()
+                            .timestamp(Instant.ofEpochSecond(d.getLong("timestamp")))
+                            .source(source.get("uniqueId", UUID.class))
+                            .sourceName(source.getString("name"))
+                            .targetType(LoggedAction.parseType(target.getString("type")))
+                            .target(targetUniqueId)
+                            .targetName(target.getString("name"))
+                            .description(d.getString("description"))
+                            .build();
+
+                    log.add(e);
+                } else {
+                    // old format
+                    UUID actedUuid = null;
+                    if (d.containsKey("acted")) {
+                        actedUuid = d.get("acted", UUID.class);
+                    }
+
+                    LoggedAction e = LoggedAction.build()
+                            .timestamp(Instant.ofEpochSecond(d.getLong("timestamp")))
+                            .source(d.get("actor", UUID.class))
+                            .sourceName(d.getString("actorName"))
+                            .targetType(LoggedAction.parseTypeCharacter(d.getString("type").charAt(0)))
+                            .target(actedUuid)
+                            .targetName(d.getString("actedName"))
+                            .description(d.getString("action"))
+                            .build();
+
+                    log.add(e);
                 }
-
-                ExtendedLogEntry e = ExtendedLogEntry.build()
-                        .timestamp(d.getLong("timestamp"))
-                        .actor(d.get("actor", UUID.class))
-                        .actorName(d.getString("actorName"))
-                        .type(LogEntry.Type.valueOf(d.getString("type").charAt(0)))
-                        .acted(actedUuid)
-                        .actedName(d.getString("actedName"))
-                        .action(d.getString("action"))
-                        .build();
-
-                log.add(e);
             }
         }
         return log.build();
@@ -217,9 +250,9 @@ public class MongoStorage implements StorageImplementation {
                 while (cursor.hasNext()) {
                     Document d = cursor.next();
 
-                    UUID uuid = d.get("_id", UUID.class);
-                    Set<NodeDataContainer> nodes = new HashSet<>(nodesFromDoc(d));
-                    Set<NodeDataContainer> results = nodes.stream()
+                    UUID uuid = getDocumentId(d);
+                    Set<Node> nodes = new HashSet<>(nodesFromDoc(d));
+                    Set<Node> results = nodes.stream()
                             .map(bulkUpdate::apply)
                             .filter(Objects::nonNull)
                             .collect(Collectors.toSet());
@@ -243,8 +276,8 @@ public class MongoStorage implements StorageImplementation {
                     Document d = cursor.next();
 
                     String holder = d.getString("_id");
-                    Set<NodeDataContainer> nodes = new HashSet<>(nodesFromDoc(d));
-                    Set<NodeDataContainer> results = nodes.stream()
+                    Set<Node> nodes = new HashSet<>(nodesFromDoc(d));
+                    Set<Node> results = nodes.stream()
                             .map(bulkUpdate::apply)
                             .filter(Objects::nonNull)
                             .collect(Collectors.toSet());
@@ -263,34 +296,32 @@ public class MongoStorage implements StorageImplementation {
     }
 
     @Override
-    public User loadUser(UUID uuid, String username) {
-        User user = this.plugin.getUserManager().getOrMake(UserIdentifier.of(uuid, username));
+    public User loadUser(UUID uniqueId, String username) {
+        User user = this.plugin.getUserManager().getOrMake(uniqueId, username);
         user.getIoLock().lock();
         try {
             MongoCollection<Document> c = this.database.getCollection(this.prefix + "users");
-            try (MongoCursor<Document> cursor = c.find(new Document("_id", user.getUuid())).iterator()) {
+            try (MongoCursor<Document> cursor = c.find(new Document("_id", user.getUniqueId())).iterator()) {
                 if (cursor.hasNext()) {
                     // User exists, let's load.
                     Document d = cursor.next();
 
                     String name = d.getString("name");
                     user.getPrimaryGroup().setStoredValue(d.getString("primaryGroup"));
-
-                    Set<Node> nodes = nodesFromDoc(d).stream().map(NodeDataContainer::toNode).collect(Collectors.toSet());
-                    user.setNodes(NodeMapType.ENDURING, nodes);
-                    user.setName(name, true);
+                    user.setNodes(DataType.NORMAL, nodesFromDoc(d));
+                    user.setUsername(name, true);
 
                     boolean save = this.plugin.getUserManager().giveDefaultIfNeeded(user, false);
-                    if (user.getName().isPresent() && (name == null || !user.getName().get().equalsIgnoreCase(name))) {
+                    if (user.getUsername().isPresent() && (name == null || !user.getUsername().get().equalsIgnoreCase(name))) {
                         save = true;
                     }
 
-                    if (save | user.auditTemporaryPermissions()) {
-                        c.replaceOne(new Document("_id", user.getUuid()), userToDoc(user));
+                    if (save | user.auditTemporaryNodes()) {
+                        c.replaceOne(new Document("_id", user.getUniqueId()), userToDoc(user));
                     }
                 } else {
                     if (this.plugin.getUserManager().shouldSave(user)) {
-                        user.clearNodes();
+                        user.clearNodes(DataType.NORMAL, null, true);
                         user.getPrimaryGroup().setStoredValue(null);
                         this.plugin.getUserManager().giveDefaultIfNeeded(user, false);
                     }
@@ -308,9 +339,9 @@ public class MongoStorage implements StorageImplementation {
         try {
             MongoCollection<Document> c = this.database.getCollection(this.prefix + "users");
             if (!this.plugin.getUserManager().shouldSave(user)) {
-                c.deleteOne(new Document("_id", user.getUuid()));
+                c.deleteOne(new Document("_id", user.getUniqueId()));
             } else {
-                c.replaceOne(new Document("_id", user.getUuid()), userToDoc(user), new UpdateOptions().upsert(true));
+                c.replaceOne(new Document("_id", user.getUniqueId()), userToDoc(user), new ReplaceOptions().upsert(true));
             }
         } finally {
             user.getIoLock().unlock();
@@ -323,28 +354,27 @@ public class MongoStorage implements StorageImplementation {
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "users");
         try (MongoCursor<Document> cursor = c.find().iterator()) {
             while (cursor.hasNext()) {
-                Document d = cursor.next();
-                uuids.add(d.get("_id", UUID.class));
+                uuids.add(getDocumentId(cursor.next()));
             }
         }
         return uuids;
     }
 
     @Override
-    public List<HeldPermission<UUID>> getUsersWithPermission(Constraint constraint) {
-        List<HeldPermission<UUID>> held = new ArrayList<>();
+    public List<HeldNode<UUID>> getUsersWithPermission(Constraint constraint) {
+        List<HeldNode<UUID>> held = new ArrayList<>();
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "users");
         try (MongoCursor<Document> cursor = c.find().iterator()) {
             while (cursor.hasNext()) {
                 Document d = cursor.next();
-                UUID holder = d.get("_id", UUID.class);
+                UUID holder = getDocumentId(d);
 
-                Set<NodeDataContainer> nodes = new HashSet<>(nodesFromDoc(d));
-                for (NodeDataContainer e : nodes) {
-                    if (!constraint.eval(e.getPermission())) {
+                Set<Node> nodes = new HashSet<>(nodesFromDoc(d));
+                for (Node e : nodes) {
+                    if (!constraint.eval(e.getKey())) {
                         continue;
                     }
-                    held.add(NodeHeldPermission.of(holder, e));
+                    held.add(HeldNodeImpl.of(holder, e));
                 }
             }
         }
@@ -360,8 +390,7 @@ public class MongoStorage implements StorageImplementation {
             try (MongoCursor<Document> cursor = c.find(new Document("_id", group.getName())).iterator()) {
                 if (cursor.hasNext()) {
                     Document d = cursor.next();
-                    Set<Node> nodes = nodesFromDoc(d).stream().map(NodeDataContainer::toNode).collect(Collectors.toSet());
-                    group.setNodes(NodeMapType.ENDURING, nodes);
+                    group.setNodes(DataType.NORMAL, nodesFromDoc(d));
                 } else {
                     c.insertOne(groupToDoc(group));
                 }
@@ -391,8 +420,7 @@ public class MongoStorage implements StorageImplementation {
                 }
 
                 Document d = cursor.next();
-                Set<Node> nodes = nodesFromDoc(d).stream().map(NodeDataContainer::toNode).collect(Collectors.toSet());
-                group.setNodes(NodeMapType.ENDURING, nodes);
+                group.setNodes(DataType.NORMAL, nodesFromDoc(d));
             }
         } finally {
             if (group != null) {
@@ -413,24 +441,11 @@ public class MongoStorage implements StorageImplementation {
             }
         }
 
-        boolean success = true;
-        for (String g : groups) {
-            try {
-                loadGroup(g);
-            } catch (Exception e) {
-                e.printStackTrace();
-                success = false;
-            }
-        }
-
-        if (!success) {
+        if (!Iterators.tryIterate(groups, this::loadGroup)) {
             throw new RuntimeException("Exception occurred whilst loading a group");
         }
 
-        GroupManager<?> gm = this.plugin.getGroupManager();
-        gm.getAll().values().stream()
-                .filter(g -> !groups.contains(g.getName()))
-                .forEach(gm::unload);
+        this.plugin.getGroupManager().retainAll(groups);
     }
 
     @Override
@@ -438,7 +453,7 @@ public class MongoStorage implements StorageImplementation {
         group.getIoLock().lock();
         try {
             MongoCollection<Document> c = this.database.getCollection(this.prefix + "groups");
-            c.replaceOne(new Document("_id", group.getName()), groupToDoc(group), new UpdateOptions().upsert(true));
+            c.replaceOne(new Document("_id", group.getName()), groupToDoc(group), new ReplaceOptions().upsert(true));
         } finally {
             group.getIoLock().unlock();
         }
@@ -456,20 +471,20 @@ public class MongoStorage implements StorageImplementation {
     }
 
     @Override
-    public List<HeldPermission<String>> getGroupsWithPermission(Constraint constraint) {
-        List<HeldPermission<String>> held = new ArrayList<>();
+    public List<HeldNode<String>> getGroupsWithPermission(Constraint constraint) {
+        List<HeldNode<String>> held = new ArrayList<>();
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "groups");
         try (MongoCursor<Document> cursor = c.find().iterator()) {
             while (cursor.hasNext()) {
                 Document d = cursor.next();
-
                 String holder = d.getString("_id");
-                Set<NodeDataContainer> nodes = new HashSet<>(nodesFromDoc(d));
-                for (NodeDataContainer e : nodes) {
-                    if (!constraint.eval(e.getPermission())) {
+
+                Set<Node> nodes = new HashSet<>(nodesFromDoc(d));
+                for (Node e : nodes) {
+                    if (!constraint.eval(e.getKey())) {
                         continue;
                     }
-                    held.add(NodeHeldPermission.of(holder, e));
+                    held.add(HeldNodeImpl.of(holder, e));
                 }
             }
         }
@@ -539,24 +554,11 @@ public class MongoStorage implements StorageImplementation {
             }
         }
 
-        boolean success = true;
-        for (String t : tracks) {
-            try {
-                loadTrack(t);
-            } catch (Exception e) {
-                e.printStackTrace();
-                success = false;
-            }
-        }
-
-        if (!success) {
+        if (!Iterators.tryIterate(tracks, this::loadTrack)) {
             throw new RuntimeException("Exception occurred whilst loading a track");
         }
 
-        TrackManager<?> tm = this.plugin.getTrackManager();
-        tm.getAll().values().stream()
-                .filter(t -> !tracks.contains(t.getName()))
-                .forEach(tm::unload);
+        this.plugin.getTrackManager().retainAll(tracks);
     }
 
     @Override
@@ -582,27 +584,27 @@ public class MongoStorage implements StorageImplementation {
     }
 
     @Override
-    public PlayerSaveResult savePlayerData(UUID uuid, String username) {
+    public PlayerSaveResult savePlayerData(UUID uniqueId, String username) {
         username = username.toLowerCase();
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "uuid");
 
         // find any existing mapping
-        String oldUsername = getPlayerName(uuid);
+        String oldUsername = getPlayerName(uniqueId);
 
         // do the insert
         if (!username.equalsIgnoreCase(oldUsername)) {
-            c.replaceOne(new Document("_id", uuid), new Document("_id", uuid).append("name", username), new UpdateOptions().upsert(true));
+            c.replaceOne(new Document("_id", uniqueId), new Document("_id", uniqueId).append("name", username), new ReplaceOptions().upsert(true));
         }
 
         PlayerSaveResultImpl result = PlayerSaveResultImpl.determineBaseResult(username, oldUsername);
 
         Set<UUID> conflicting = new HashSet<>();
         try (MongoCursor<Document> cursor = c.find(new Document("name", username)).iterator()) {
-            if (cursor.hasNext()) {
-                conflicting.add(cursor.next().get("_id", UUID.class));
+            while (cursor.hasNext()) {
+                conflicting.add(getDocumentId(cursor.next()));
             }
         }
-        conflicting.remove(uuid);
+        conflicting.remove(uniqueId);
 
         if (!conflicting.isEmpty()) {
             // remove the mappings for conflicting uuids
@@ -614,52 +616,49 @@ public class MongoStorage implements StorageImplementation {
     }
 
     @Override
-    public UUID getPlayerUuid(String username) {
+    public UUID getPlayerUniqueId(String username) {
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "uuid");
         Document doc = c.find(new Document("name", username.toLowerCase())).first();
         if (doc != null) {
-            return doc.get("_id", UUID.class);
+            return getDocumentId(doc);
         }
         return null;
     }
 
     @Override
-    public String getPlayerName(UUID uuid) {
+    public String getPlayerName(UUID uniqueId) {
         MongoCollection<Document> c = this.database.getCollection(this.prefix + "uuid");
-        Document doc = c.find(new Document("_id", uuid)).first();
+        Document doc = c.find(new Document("_id", uniqueId)).first();
         if (doc != null) {
             return doc.get("name", String.class);
         }
         return null;
     }
 
+    private static UUID getDocumentId(Document doc) {
+        Object id = doc.get("_id");
+        if (id instanceof UUID) {
+            return (UUID) id;
+        } else if (id instanceof String) {
+            return UUID.fromString((String) id);
+        } else {
+            throw new IllegalArgumentException("Unknown id type: " + id.getClass().getName());
+        }
+    }
+
     private static Document userToDoc(User user) {
-        List<Document> nodes = user.enduringData().immutable().values().stream()
-                .map(NodeDataContainer::fromNode)
+        List<Document> nodes = user.normalData().immutable().values().stream()
                 .map(MongoStorage::nodeToDoc)
                 .collect(Collectors.toList());
 
-        return new Document("_id", user.getUuid())
-                .append("name", user.getName().orElse("null"))
-                .append("primaryGroup", user.getPrimaryGroup().getStoredValue().orElse(NodeFactory.DEFAULT_GROUP_NAME))
+        return new Document("_id", user.getUniqueId())
+                .append("name", user.getUsername().orElse("null"))
+                .append("primaryGroup", user.getPrimaryGroup().getStoredValue().orElse(GroupManager.DEFAULT_GROUP_NAME))
                 .append("permissions", nodes);
     }
 
-    private static List<NodeDataContainer> nodesFromDoc(Document document) {
-        List<NodeDataContainer> nodes = new ArrayList<>();
-
-        // legacy
-        if (document.containsKey("perms") && document.get("perms") instanceof Map) {
-            //noinspection unchecked
-            Map<String, Boolean> permsMap = (Map<String, Boolean>) document.get("perms");
-            for (Map.Entry<String, Boolean> e : permsMap.entrySet()) {
-                // legacy permission key deserialisation
-                String permission = e.getKey().replace("[**DOT**]", ".").replace("[**DOLLAR**]", "$");
-                nodes.add(NodeDataContainer.fromNode(LegacyNodeFactory.fromLegacyString(permission, e.getValue())));
-            }
-        }
-
-        // new format
+    private static List<Node> nodesFromDoc(Document document) {
+        List<Node> nodes = new ArrayList<>();
         if (document.containsKey("permissions") && document.get("permissions") instanceof List) {
             //noinspection unchecked
             List<Document> permsList = (List<Document>) document.get("permissions");
@@ -667,13 +666,11 @@ public class MongoStorage implements StorageImplementation {
                 nodes.add(nodeFromDoc(d));
             }
         }
-
         return nodes;
     }
 
     private static Document groupToDoc(Group group) {
-        List<Document> nodes = group.enduringData().immutable().values().stream()
-                .map(NodeDataContainer::fromNode)
+        List<Document> nodes = group.normalData().immutable().values().stream()
                 .map(MongoStorage::nodeToDoc)
                 .collect(Collectors.toList());
 
@@ -684,22 +681,15 @@ public class MongoStorage implements StorageImplementation {
         return new Document("_id", track.getName()).append("groups", track.getGroups());
     }
 
-    private static Document nodeToDoc(NodeDataContainer node) {
+    private static Document nodeToDoc(Node node) {
         Document document = new Document();
 
-        document.append("permission", node.getPermission());
+        document.append("key", node.getKey());
         document.append("value", node.getValue());
 
-        if (!node.getServer().equals("global")) {
-            document.append("server", node.getServer());
-        }
-
-        if (!node.getWorld().equals("global")) {
-            document.append("world", node.getWorld());
-        }
-
-        if (node.getExpiry() != 0L) {
-            document.append("expiry", node.getExpiry());
+        Instant expiry = node.getExpiry();
+        if (expiry != null) {
+            document.append("expiry", expiry.getEpochSecond());
         }
 
         if (!node.getContexts().isEmpty()) {
@@ -709,46 +699,43 @@ public class MongoStorage implements StorageImplementation {
         return document;
     }
 
-    private static NodeDataContainer nodeFromDoc(Document document) {
-        String permission = document.getString("permission");
-        boolean value = true;
-        String server = "global";
-        String world = "global";
-        long expiry = 0L;
-        ImmutableContextSet context = ImmutableContextSet.empty();
+    private static Node nodeFromDoc(Document document) {
+        String key = document.containsKey("permission") ? document.getString("permission") : document.getString("key");
 
-        if (document.containsKey("value")) {
-            value = document.getBoolean("value");
-        }
+        NodeBuilder<?, ?> builder = NodeBuilders.determineMostApplicable(key)
+                .value(document.getBoolean("value", true));
+
         if (document.containsKey("server")) {
-            server = document.getString("server");
+            builder.withContext(DefaultContextKeys.SERVER_KEY, document.getString("server"));
         }
+
         if (document.containsKey("world")) {
-            world = document.getString("world");
+            builder.withContext(DefaultContextKeys.WORLD_KEY, document.getString("world"));
         }
+
         if (document.containsKey("expiry")) {
-            expiry = document.getLong("expiry");
+            builder.expiry(document.getLong("expiry"));
         }
 
         if (document.containsKey("context") && document.get("context") instanceof List) {
             //noinspection unchecked
             List<Document> contexts = (List<Document>) document.get("context");
-            context = docsToContextSet(contexts).makeImmutable();
+            builder.withContext(docsToContextSet(contexts));
         }
 
-        return NodeDataContainer.of(permission, value, server, world, expiry, context);
+        return builder.build();
     }
 
     private static List<Document> contextSetToDocs(ContextSet contextSet) {
-        List<Document> contexts = new ArrayList<>();
-        for (Map.Entry<String, String> e : contextSet.toSet()) {
+        List<Document> contexts = new ArrayList<>(contextSet.size());
+        for (Context e : contextSet) {
             contexts.add(new Document().append("key", e.getKey()).append("value", e.getValue()));
         }
         return contexts;
     }
 
     private static MutableContextSet docsToContextSet(List<Document> documents) {
-        MutableContextSet map = MutableContextSet.create();
+        MutableContextSet map = new MutableContextSetImpl();
         for (Document doc : documents) {
             map.add(doc.getString("key"), doc.getString("value"));
         }

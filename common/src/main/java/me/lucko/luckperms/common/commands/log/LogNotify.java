@@ -25,26 +25,28 @@
 
 package me.lucko.luckperms.common.commands.log;
 
-import me.lucko.luckperms.api.Node;
-import me.lucko.luckperms.api.context.ContextSet;
 import me.lucko.luckperms.common.actionlog.Log;
 import me.lucko.luckperms.common.command.CommandResult;
-import me.lucko.luckperms.common.command.abstraction.SubCommand;
+import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.context.contextset.ImmutableContextSetImpl;
 import me.lucko.luckperms.common.locale.LocaleManager;
 import me.lucko.luckperms.common.locale.command.CommandSpec;
 import me.lucko.luckperms.common.locale.message.Message;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.node.factory.NodeBuilders;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.util.Predicates;
+
+import net.luckperms.api.model.data.DataType;
+import net.luckperms.api.node.Node;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public class LogNotify extends SubCommand<Log> {
+public class LogNotify extends ChildCommand<Log> {
     private static final String IGNORE_NODE = "luckperms.log.notify.ignoring";
 
     public LogNotify(LocaleManager locale) {
@@ -57,13 +59,13 @@ public class LogNotify extends SubCommand<Log> {
             return false;
         }
 
-        Optional<? extends Node> ret = user.enduringData().immutable().get(ContextSet.empty()).stream()
-                .filter(n -> n.getPermission().equalsIgnoreCase(IGNORE_NODE))
+        Optional<? extends Node> node = user.normalData().immutable().get(ImmutableContextSetImpl.EMPTY).stream()
+                .filter(n -> n.getKey().equalsIgnoreCase(IGNORE_NODE))
                 .findFirst();
 
         // if they don't have the perm, they're not ignoring
         // if set to false, ignore it, return false
-        return ret.map(Node::getValue).orElse(false);
+        return node.map(Node::getValue).orElse(false);
     }
 
     private static void setIgnoring(LuckPermsPlugin plugin, UUID uuid, boolean state) {
@@ -74,10 +76,10 @@ public class LogNotify extends SubCommand<Log> {
 
         if (state) {
             // add the perm
-            user.setPermission(NodeFactory.make(IGNORE_NODE));
+            user.setNode(DataType.NORMAL, NodeBuilders.determineMostApplicable(IGNORE_NODE).build(), true);
         } else {
             // remove the perm
-            user.removeIf(ContextSet.empty(), n -> n.getPermission().equalsIgnoreCase(IGNORE_NODE));
+            user.removeIf(DataType.NORMAL, ImmutableContextSetImpl.EMPTY, n -> n.getKey().equalsIgnoreCase(IGNORE_NODE), false);
         }
 
         plugin.getStorage().saveUser(user).join();
@@ -85,12 +87,12 @@ public class LogNotify extends SubCommand<Log> {
 
     @Override
     public CommandResult execute(LuckPermsPlugin plugin, Sender sender, Log log, List<String> args, String label) {
-        if (sender.isConsole() || sender.isImport()) {
+        if (sender.isConsole()) {
             Message.LOG_NOTIFY_CONSOLE.send(sender);
             return CommandResult.SUCCESS;
         }
 
-        final UUID uuid = sender.getUuid();
+        final UUID uuid = sender.getUniqueId();
         if (args.isEmpty()) {
             if (isIgnoring(plugin, uuid)) {
                 // toggle on

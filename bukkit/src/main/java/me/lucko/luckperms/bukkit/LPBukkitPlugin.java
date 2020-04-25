@@ -25,22 +25,19 @@
 
 package me.lucko.luckperms.bukkit;
 
-import me.lucko.luckperms.api.Contexts;
-import me.lucko.luckperms.api.LuckPermsApi;
-import me.lucko.luckperms.api.event.user.UserDataRecalculateEvent;
+import me.lucko.luckperms.bukkit.brigadier.LuckPermsBrigadier;
 import me.lucko.luckperms.bukkit.calculator.BukkitCalculatorFactory;
-import me.lucko.luckperms.bukkit.compat.LuckPermsBrigadier;
 import me.lucko.luckperms.bukkit.context.BukkitContextManager;
 import me.lucko.luckperms.bukkit.context.WorldCalculator;
-import me.lucko.luckperms.bukkit.inject.permissible.LPPermissible;
+import me.lucko.luckperms.bukkit.inject.permissible.LuckPermsPermissible;
 import me.lucko.luckperms.bukkit.inject.permissible.PermissibleInjector;
 import me.lucko.luckperms.bukkit.inject.permissible.PermissibleMonitoringInjector;
 import me.lucko.luckperms.bukkit.inject.server.InjectorDefaultsMap;
 import me.lucko.luckperms.bukkit.inject.server.InjectorPermissionMap;
 import me.lucko.luckperms.bukkit.inject.server.InjectorSubscriptionMap;
-import me.lucko.luckperms.bukkit.inject.server.LPDefaultsMap;
-import me.lucko.luckperms.bukkit.inject.server.LPPermissionMap;
-import me.lucko.luckperms.bukkit.inject.server.LPSubscriptionMap;
+import me.lucko.luckperms.bukkit.inject.server.LuckPermsDefaultsMap;
+import me.lucko.luckperms.bukkit.inject.server.LuckPermsPermissionMap;
+import me.lucko.luckperms.bukkit.inject.server.LuckPermsSubscriptionMap;
 import me.lucko.luckperms.bukkit.listeners.BukkitConnectionListener;
 import me.lucko.luckperms.bukkit.listeners.BukkitPlatformListener;
 import me.lucko.luckperms.bukkit.messaging.BukkitMessagingFactory;
@@ -63,6 +60,10 @@ import me.lucko.luckperms.common.plugin.util.AbstractConnectionListener;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.tasks.CacheHousekeepingTask;
 import me.lucko.luckperms.common.tasks.ExpireTemporaryTask;
+
+import net.luckperms.api.LuckPerms;
+import net.luckperms.api.event.user.UserDataRecalculateEvent;
+import net.luckperms.api.query.QueryOptions;
 
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.PluginCommand;
@@ -92,9 +93,9 @@ public class LPBukkitPlugin extends AbstractLuckPermsPlugin {
     private StandardGroupManager groupManager;
     private StandardTrackManager trackManager;
     private BukkitContextManager contextManager;
-    private LPSubscriptionMap subscriptionMap;
-    private LPPermissionMap permissionMap;
-    private LPDefaultsMap defaultPermissionMap;
+    private LuckPermsSubscriptionMap subscriptionMap;
+    private LuckPermsPermissionMap permissionMap;
+    private LuckPermsDefaultsMap defaultPermissionMap;
     private VaultHookManager vaultHookManager = null;
     
     public LPBukkitPlugin(LPBukkitBootstrap bootstrap) {
@@ -109,15 +110,6 @@ public class LPBukkitPlugin extends AbstractLuckPermsPlugin {
     @Override
     protected void setupSenderFactory() {
         this.senderFactory = new BukkitSenderFactory(this);
-    }
-
-    private static boolean isBrigadierSupported() {
-        try {
-            Class.forName("com.mojang.brigadier.CommandDispatcher");
-            return true;
-        } catch (ClassNotFoundException var1) {
-            return false;
-        }
     }
 
     @Override
@@ -149,15 +141,24 @@ public class LPBukkitPlugin extends AbstractLuckPermsPlugin {
 
     @Override
     protected void registerCommands() {
-        this.commandManager = new BukkitCommandExecutor(this);
-        PluginCommand cmd = this.bootstrap.getCommand("luckperms");
-        cmd.setExecutor(this.commandManager);
-        cmd.setTabCompleter(this.commandManager);
+        PluginCommand command = this.bootstrap.getCommand("luckperms");
+        if (command == null) {
+            getLogger().severe("Unable to register /luckperms command with the server");
+            return;
+        }
+
+        if (isAsyncTabCompleteSupported()) {
+            this.commandManager = new BukkitAsyncCommandExecutor(this, command);
+        } else {
+            this.commandManager = new BukkitCommandExecutor(this, command);
+        }
+
+        this.commandManager.register();
 
         // setup brigadier
         if (isBrigadierSupported()) {
             try {
-                LuckPermsBrigadier.register(this, cmd);
+                LuckPermsBrigadier.register(this, command);
             } catch (Exception e) {
                 if (!(e instanceof RuntimeException && e.getMessage().contains("not supported by the server"))) {
                     e.printStackTrace();
@@ -188,9 +189,9 @@ public class LPBukkitPlugin extends AbstractLuckPermsPlugin {
     protected void setupPlatformHooks() {
         // inject our own custom permission maps
         Runnable[] injectors = new Runnable[]{
-                new InjectorSubscriptionMap(this),
-                new InjectorPermissionMap(this),
-                new InjectorDefaultsMap(this),
+                new InjectorSubscriptionMap(this)::inject,
+                new InjectorPermissionMap(this)::inject,
+                new InjectorDefaultsMap(this)::inject,
                 new PermissibleMonitoringInjector(this, PermissibleMonitoringInjector.Mode.INJECT)
         };
 
@@ -207,7 +208,7 @@ public class LPBukkitPlugin extends AbstractLuckPermsPlugin {
     }
 
     @Override
-    protected AbstractEventBus provideEventBus(LuckPermsApiProvider apiProvider) {
+    protected AbstractEventBus<?> provideEventBus(LuckPermsApiProvider apiProvider) {
         return new BukkitEventBus(this, apiProvider);
     }
 
@@ -230,8 +231,8 @@ public class LPBukkitPlugin extends AbstractLuckPermsPlugin {
     }
 
     @Override
-    protected void registerApiOnPlatform(LuckPermsApi api) {
-        this.bootstrap.getServer().getServicesManager().register(LuckPermsApi.class, api, this.bootstrap, ServicePriority.Normal);
+    protected void registerApiOnPlatform(LuckPerms api) {
+        this.bootstrap.getServer().getServicesManager().register(LuckPerms.class, api, this.bootstrap, ServicePriority.Normal);
     }
 
     @Override
@@ -267,7 +268,7 @@ public class LPBukkitPlugin extends AbstractLuckPermsPlugin {
         if (getConfiguration().get(ConfigKeys.AUTO_OP)) {
             getApiProvider().getEventBus().subscribe(UserDataRecalculateEvent.class, event -> {
                 User user = ApiUser.cast(event.getUser());
-                Optional<Player> player = getBootstrap().getPlayer(user.getUuid());
+                Optional<Player> player = getBootstrap().getPlayer(user.getUniqueId());
                 player.ifPresent(p -> refreshAutoOp(p, false));
             });
         }
@@ -280,7 +281,7 @@ public class LPBukkitPlugin extends AbstractLuckPermsPlugin {
                     if (user != null) {
                         this.bootstrap.getScheduler().executeSync(() -> {
                             try {
-                                LPPermissible lpPermissible = new LPPermissible(player, user, this);
+                                LuckPermsPermissible lpPermissible = new LuckPermsPermissible(player, user, this);
                                 PermissibleInjector.inject(player, lpPermissible);
                             } catch (Throwable t) {
                                 t.printStackTrace();
@@ -311,14 +312,14 @@ public class LPBukkitPlugin extends AbstractLuckPermsPlugin {
             final User user = getUserManager().getIfLoaded(player.getUniqueId());
             if (user != null) {
                 user.getCachedData().invalidate();
-                getUserManager().unload(user);
+                getUserManager().unload(user.getUniqueId());
             }
         }
 
         // uninject custom maps
-        InjectorSubscriptionMap.uninject();
-        InjectorPermissionMap.uninject();
-        InjectorDefaultsMap.uninject();
+        new InjectorSubscriptionMap(this).uninject();
+        new InjectorPermissionMap(this).uninject();
+        new InjectorDefaultsMap(this).uninject();
         new PermissibleMonitoringInjector(this, PermissibleMonitoringInjector.Mode.UNINJECT).run();
 
         // unhook vault
@@ -332,11 +333,15 @@ public class LPBukkitPlugin extends AbstractLuckPermsPlugin {
             return;
         }
 
+        if (!callerIsSync && this.bootstrap.isServerStopping()) {
+            return;
+        }
+
         User user = getUserManager().getIfLoaded(player.getUniqueId());
         boolean value;
 
         if (user != null) {
-            Map<String, Boolean> permData = user.getCachedData().getPermissionData(this.contextManager.getApplicableContexts(player)).getImmutableBacking();
+            Map<String, Boolean> permData = user.getCachedData().getPermissionData(this.contextManager.getQueryOptions(player)).getPermissionMap();
             value = permData.getOrDefault("luckperms.autoop", false);
         } else {
             value = false;
@@ -358,9 +363,26 @@ public class LPBukkitPlugin extends AbstractLuckPermsPlugin {
         return configFile;
     }
 
+    private static boolean classExists(String className) {
+        try {
+            Class.forName(className);
+            return true;
+        } catch (ClassNotFoundException var1) {
+            return false;
+        }
+    }
+
+    private static boolean isBrigadierSupported() {
+        return classExists("com.mojang.brigadier.CommandDispatcher");
+    }
+
+    private static boolean isAsyncTabCompleteSupported() {
+        return classExists("com.destroystokyo.paper.event.server.AsyncTabCompleteEvent");
+    }
+
     @Override
-    public Optional<Contexts> getContextForUser(User user) {
-        return this.bootstrap.getPlayer(user.getUuid()).map(player -> this.contextManager.getApplicableContexts(player));
+    public Optional<QueryOptions> getQueryOptionsForUser(User user) {
+        return this.bootstrap.getPlayer(user.getUniqueId()).map(player -> this.contextManager.getQueryOptions(player));
     }
 
     @Override
@@ -410,27 +432,27 @@ public class LPBukkitPlugin extends AbstractLuckPermsPlugin {
         return this.contextManager;
     }
 
-    public LPSubscriptionMap getSubscriptionMap() {
+    public LuckPermsSubscriptionMap getSubscriptionMap() {
         return this.subscriptionMap;
     }
 
-    public void setSubscriptionMap(LPSubscriptionMap subscriptionMap) {
+    public void setSubscriptionMap(LuckPermsSubscriptionMap subscriptionMap) {
         this.subscriptionMap = subscriptionMap;
     }
 
-    public LPPermissionMap getPermissionMap() {
+    public LuckPermsPermissionMap getPermissionMap() {
         return this.permissionMap;
     }
 
-    public void setPermissionMap(LPPermissionMap permissionMap) {
+    public void setPermissionMap(LuckPermsPermissionMap permissionMap) {
         this.permissionMap = permissionMap;
     }
 
-    public LPDefaultsMap getDefaultPermissionMap() {
+    public LuckPermsDefaultsMap getDefaultPermissionMap() {
         return this.defaultPermissionMap;
     }
 
-    public void setDefaultPermissionMap(LPDefaultsMap defaultPermissionMap) {
+    public void setDefaultPermissionMap(LuckPermsDefaultsMap defaultPermissionMap) {
         this.defaultPermissionMap = defaultPermissionMap;
     }
 

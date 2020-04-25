@@ -25,7 +25,6 @@
 
 package me.lucko.luckperms.common.plugin;
 
-import me.lucko.luckperms.api.LuckPermsApi;
 import me.lucko.luckperms.common.actionlog.LogDispatcher;
 import me.lucko.luckperms.common.api.ApiRegistrationUtil;
 import me.lucko.luckperms.common.api.LuckPermsApiProvider;
@@ -38,7 +37,8 @@ import me.lucko.luckperms.common.context.LPStaticContextsCalculator;
 import me.lucko.luckperms.common.dependencies.Dependency;
 import me.lucko.luckperms.common.dependencies.DependencyManager;
 import me.lucko.luckperms.common.event.AbstractEventBus;
-import me.lucko.luckperms.common.event.EventFactory;
+import me.lucko.luckperms.common.event.EventDispatcher;
+import me.lucko.luckperms.common.extension.SimpleExtensionManager;
 import me.lucko.luckperms.common.inheritance.InheritanceHandler;
 import me.lucko.luckperms.common.locale.LocaleManager;
 import me.lucko.luckperms.common.locale.message.Message;
@@ -49,13 +49,18 @@ import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.storage.Storage;
 import me.lucko.luckperms.common.storage.StorageFactory;
 import me.lucko.luckperms.common.storage.StorageType;
-import me.lucko.luckperms.common.storage.implementation.file.FileWatcher;
+import me.lucko.luckperms.common.storage.implementation.file.watcher.FileWatcher;
 import me.lucko.luckperms.common.tasks.SyncTask;
 import me.lucko.luckperms.common.treeview.PermissionRegistry;
 import me.lucko.luckperms.common.verbose.VerboseHandler;
-import me.lucko.luckperms.common.web.Bytebin;
+import me.lucko.luckperms.common.web.BytebinClient;
 
-import java.io.IOException;
+import net.luckperms.api.LuckPerms;
+
+import okhttp3.OkHttpClient;
+
+import java.time.Duration;
+import java.time.Instant;
 import java.util.EnumSet;
 import java.util.Optional;
 import java.util.Set;
@@ -72,7 +77,7 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
     private LogDispatcher logDispatcher;
     private LuckPermsConfiguration configuration;
     private LocaleManager localeManager;
-    private Bytebin bytebin;
+    private BytebinClient bytebin;
     private FileWatcher fileWatcher = null;
     private Storage storage;
     private InternalMessagingService messagingService = null;
@@ -80,7 +85,8 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
     private InheritanceHandler inheritanceHandler;
     private CalculatorFactory calculatorFactory;
     private LuckPermsApiProvider apiProvider;
-    private EventFactory eventFactory;
+    private EventDispatcher eventDispatcher;
+    private SimpleExtensionManager extensionManager;
 
     /**
      * Performs the initial actions to load the plugin
@@ -112,7 +118,7 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
         this.localeManager.tryLoad(this, getBootstrap().getConfigDirectory().resolve("lang.yml"));
 
         // setup a bytebin instance
-        this.bytebin = new Bytebin(getConfiguration().get(ConfigKeys.BYTEBIN_URL));
+        this.bytebin = new BytebinClient(new OkHttpClient(), getConfiguration().get(ConfigKeys.BYTEBIN_URL), "luckperms");
 
         // now the configuration is loaded, we can create a storage factory and load initial dependencies
         StorageFactory storageFactory = new StorageFactory(this);
@@ -127,7 +133,10 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
         if (getConfiguration().get(ConfigKeys.WATCH_FILES)) {
             try {
                 this.fileWatcher = new FileWatcher(this, getBootstrap().getDataDirectory());
-            } catch (IOException e) {
+            } catch (Throwable e) {
+                // catch throwable here, seems some JVMs throw UnsatisfiedLinkError when trying
+                // to create a watch service. see: https://github.com/lucko/LuckPerms/issues/2066
+                getLogger().warn("Error occurred whilst trying to create a file watcher:");
                 e.printStackTrace();
             }
         }
@@ -161,9 +170,13 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
 
         // register with the LP API
         this.apiProvider = new LuckPermsApiProvider(this);
-        this.eventFactory = new EventFactory(provideEventBus(this.apiProvider));
+        this.eventDispatcher = new EventDispatcher(provideEventBus(this.apiProvider));
         ApiRegistrationUtil.registerProvider(this.apiProvider);
         registerApiOnPlatform(this.apiProvider);
+
+        // setup extension manager
+        this.extensionManager = new SimpleExtensionManager(this);
+        this.extensionManager.loadExtensions(getBootstrap().getConfigDirectory().resolve("extensions"));
 
         // schedule update tasks
         int mins = getConfiguration().get(ConfigKeys.SYNC_TIME);
@@ -174,7 +187,7 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
         // run an update instantly.
         getLogger().info("Performing initial data load...");
         try {
-            new SyncTask(this, true).run();
+            new SyncTask(this).run();
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -185,13 +198,22 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
         // perform any platform-specific final setup tasks
         performFinalSetup();
 
-        getLogger().info("Successfully enabled. (took " + (System.currentTimeMillis() - getBootstrap().getStartupTime()) + "ms)");
+        Duration timeTaken = Duration.between(getBootstrap().getStartupTime(), Instant.now());
+        getLogger().info("Successfully enabled. (took " + timeTaken.toMillis() + "ms)");
     }
 
     public final void disable() {
+        getLogger().info("Starting shutdown process...");
+
+        // cancel delayed/repeating tasks
+        getBootstrap().getScheduler().shutdownScheduler();
+
         // shutdown permission vault and verbose handler tasks
-        this.permissionRegistry.stop();
-        this.verboseHandler.stop();
+        this.permissionRegistry.close();
+        this.verboseHandler.close();
+
+        // unload extensions
+        this.extensionManager.close();
 
         // remove any hooks into the platform
         removePlatformHooks();
@@ -214,9 +236,8 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
         // unregister api
         ApiRegistrationUtil.unregisterProvider();
 
-        // shutdown scheduler
-        getLogger().info("Shutting down internal scheduler...");
-        getBootstrap().getScheduler().shutdown();
+        // shutdown async executor pool
+        getBootstrap().getScheduler().shutdownExecutor();
 
         getLogger().info("Goodbye!");
     }
@@ -229,6 +250,7 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
                 Dependency.CAFFEINE,
                 Dependency.OKIO,
                 Dependency.OKHTTP,
+                Dependency.BYTEBUDDY,
                 Dependency.EVENT
         );
     }
@@ -242,8 +264,8 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
     protected abstract CalculatorFactory provideCalculatorFactory();
     protected abstract void setupContextManager();
     protected abstract void setupPlatformHooks();
-    protected abstract AbstractEventBus provideEventBus(LuckPermsApiProvider apiProvider);
-    protected abstract void registerApiOnPlatform(LuckPermsApi api);
+    protected abstract AbstractEventBus<?> provideEventBus(LuckPermsApiProvider apiProvider);
+    protected abstract void registerApiOnPlatform(LuckPerms api);
     protected abstract void registerHousekeepingTasks();
     protected abstract void performFinalSetup();
 
@@ -292,7 +314,7 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
     }
 
     @Override
-    public Bytebin getBytebin() {
+    public BytebinClient getBytebin() {
         return this.bytebin;
     }
 
@@ -332,8 +354,13 @@ public abstract class AbstractLuckPermsPlugin implements LuckPermsPlugin {
     }
 
     @Override
-    public EventFactory getEventFactory() {
-        return this.eventFactory;
+    public SimpleExtensionManager getExtensionManager() {
+        return this.extensionManager;
+    }
+
+    @Override
+    public EventDispatcher getEventDispatcher() {
+        return this.eventDispatcher;
     }
 
     private void displayBanner(Sender sender) {

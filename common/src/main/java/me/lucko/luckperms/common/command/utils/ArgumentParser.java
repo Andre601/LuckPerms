@@ -25,18 +25,29 @@
 
 package me.lucko.luckperms.common.command.utils;
 
-import me.lucko.luckperms.api.Contexts;
-import me.lucko.luckperms.api.TemporaryMergeBehaviour;
-import me.lucko.luckperms.api.context.ImmutableContextSet;
-import me.lucko.luckperms.api.context.MutableContextSet;
+import me.lucko.luckperms.common.command.CommandResult;
+import me.lucko.luckperms.common.command.abstraction.Command;
 import me.lucko.luckperms.common.command.abstraction.CommandException;
-import me.lucko.luckperms.common.commands.user.UserMainCommand;
+import me.lucko.luckperms.common.command.abstraction.GenericChildCommand;
+import me.lucko.luckperms.common.commands.user.UserParentCommand;
+import me.lucko.luckperms.common.context.contextset.AbstractContextSet;
+import me.lucko.luckperms.common.context.contextset.ImmutableContextSetImpl;
+import me.lucko.luckperms.common.context.contextset.MutableContextSetImpl;
+import me.lucko.luckperms.common.locale.message.Message;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.storage.misc.DataConstraints;
-import me.lucko.luckperms.common.util.DateParser;
+import me.lucko.luckperms.common.util.DurationParser;
 
-import java.util.ArrayList;
+import net.luckperms.api.context.Context;
+import net.luckperms.api.context.DefaultContextKeys;
+import net.luckperms.api.context.ImmutableContextSet;
+import net.luckperms.api.context.MutableContextSet;
+import net.luckperms.api.model.data.TemporaryNodeMergeStrategy;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -98,139 +109,99 @@ public class ArgumentParser {
         return true;
     }
 
-    public static long parseDuration(int index, List<String> args) throws ArgumentException {
-        long duration;
+    public static Duration parseDuration(int index, List<String> args) throws ArgumentException {
+        String input = args.get(index);
+        Duration duration;
+
         try {
-            duration = Long.parseLong(args.get(index));
+            long number = Long.parseLong(input);
+            Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+            duration = Duration.between(now, Instant.ofEpochSecond(number));
         } catch (NumberFormatException e) {
             try {
-                duration = DateParser.parseDate(args.get(index), true);
+                duration = DurationParser.parseDuration(input);
             } catch (IllegalArgumentException e1) {
-                throw new InvalidDateException(args.get(index));
+                throw new InvalidDateException(input);
             }
         }
 
-        if (shouldExpire(duration)) {
+        if (duration.isNegative()) {
             throw new PastDateException();
         }
 
         return duration;
     }
 
-    private static boolean shouldExpire(long unixTime) {
-        return unixTime < (System.currentTimeMillis() / 1000L);
-    }
-
-    public static TemporaryMergeBehaviour parseTemporaryModifier(String s) {
+    public static TemporaryNodeMergeStrategy parseTemporaryModifier(String s) {
         switch (s.toLowerCase()) {
             case "accumulate":
-                return TemporaryMergeBehaviour.ADD_NEW_DURATION_TO_EXISTING;
+                return TemporaryNodeMergeStrategy.ADD_NEW_DURATION_TO_EXISTING;
             case "replace":
-                return TemporaryMergeBehaviour.REPLACE_EXISTING_IF_DURATION_LONGER;
+                return TemporaryNodeMergeStrategy.REPLACE_EXISTING_IF_DURATION_LONGER;
             case "deny":
-                return TemporaryMergeBehaviour.FAIL_WITH_ALREADY_HAS;
+            case "none":
+                return TemporaryNodeMergeStrategy.NONE;
             default:
                 throw new IllegalArgumentException("Unknown value: " + s);
         }
     }
 
-    public static Optional<TemporaryMergeBehaviour> parseTemporaryModifier(int index, List<String> args) {
+    public static Optional<TemporaryNodeMergeStrategy> parseTemporaryModifier(int index, List<String> args) {
         if (index < 0 || index >= args.size()) {
             return Optional.empty();
         }
 
         String s = args.get(index);
         try {
-            Optional<TemporaryMergeBehaviour> ret = Optional.of(parseTemporaryModifier(s));
+            Optional<TemporaryNodeMergeStrategy> strategy = Optional.of(parseTemporaryModifier(s));
             args.remove(index);
-            return ret;
+            return strategy;
         } catch (IllegalArgumentException e) {
             return Optional.empty();
         }
     }
 
     public static MutableContextSet parseContext(int fromIndex, List<String> args, LuckPermsPlugin plugin) throws CommandException {
-        if (args.size() > fromIndex) {
-            MutableContextSet set = MutableContextSet.create();
-
-            List<String> contexts = args.subList(fromIndex, args.size());
-
-            for (int i = 0; i < contexts.size(); i++) {
-                String pair = contexts.get(i);
-
-                // one of the first two values, and doesn't have a key
-                if (i <= 1 && !pair.contains("=")) {
-                    String key = i == 0 ? Contexts.SERVER_KEY : Contexts.WORLD_KEY;
-                    set.add(key, pair);
-                    continue;
-                }
-
-                int index = pair.indexOf('=');
-                if (index == -1) {
-                    continue;
-                }
-
-                String key = pair.substring(0, index);
-                if (key.equals("") || key.trim().isEmpty()) {
-                    continue;
-                }
-
-                String value = pair.substring(index + 1);
-                if (value.equals("") || value.trim().isEmpty()) {
-                    continue;
-                }
-
-                set.add(key, value);
-            }
-
-            return sanitizeContexts(set);
-        } else {
-            return sanitizeContexts(plugin.getConfiguration().getContextsFile().getDefaultContexts().mutableCopy());
+        if (args.size() <= fromIndex) {
+            return plugin.getConfiguration().getContextsFile().getDefaultContexts().mutableCopy();
         }
+        return parseContext(fromIndex, args);
     }
 
-    private static MutableContextSet sanitizeContexts(MutableContextSet set) throws ArgumentException {
-        // remove any potential "global" context mappings
-        set.remove(Contexts.SERVER_KEY, "global");
-        set.remove(Contexts.WORLD_KEY, "global");
-        set.remove(Contexts.SERVER_KEY, "null");
-        set.remove(Contexts.WORLD_KEY, "null");
-        set.remove(Contexts.SERVER_KEY, "*");
-        set.remove(Contexts.WORLD_KEY, "*");
+    public static ImmutableContextSet parseContextSponge(int fromIndex, List<String> args) {
+        if (args.size() <= fromIndex) {
+            return ImmutableContextSetImpl.EMPTY;
+        }
+        return parseContext(fromIndex, args).immutableCopy();
+    }
 
-        // remove excess entries from the set.
-        // (it can only have one server and one world.)
-        List<String> servers = new ArrayList<>(set.getValues(Contexts.SERVER_KEY));
-        if (servers.size() > 1) {
-            // start iterating at index 1
-            for (int i = 1; i < servers.size(); i++) {
-                set.remove(Contexts.SERVER_KEY, servers.get(i));
+    private static MutableContextSet parseContext(int fromIndex, List<String> args) {
+        MutableContextSet contextSet = new MutableContextSetImpl();
+        List<String> entries = args.subList(fromIndex, args.size());
+        for (int i = 0; i < entries.size(); i++) {
+            String entry = entries.get(i);
+            int sep = entry.indexOf('=');
+
+            String key;
+            String value;
+
+            if (sep != -1) {
+                key = entry.substring(0, sep);
+                value = entry.substring(sep + 1);
+            } else {
+                key = i == 1 ? DefaultContextKeys.WORLD_KEY : DefaultContextKeys.SERVER_KEY;
+                value = entry;
             }
+
+            // TODO reconsider a better place to insert / avoid this special case
+            if (!Context.isValidKey(key) || !Context.isValidValue(value) || AbstractContextSet.isGlobalServerWorldEntry(key, value)) {
+                continue;
+            }
+
+            contextSet.add(key, value);
         }
 
-        List<String> worlds = new ArrayList<>(set.getValues(Contexts.WORLD_KEY));
-        if (worlds.size() > 1) {
-            // start iterating at index 1
-            for (int i = 1; i < worlds.size(); i++) {
-                set.remove(Contexts.WORLD_KEY, worlds.get(i));
-            }
-        }
-
-        // there's either none or 1
-        for (String server : servers) {
-            if (!DataConstraints.SERVER_NAME_TEST.test(server)) {
-                throw new InvalidServerWorldException();
-            }
-        }
-
-        // there's either none or 1
-        for (String world : worlds) {
-            if (!DataConstraints.WORLD_NAME_TEST.test(world)) {
-                throw new InvalidServerWorldException();
-            }
-        }
-
-        return set;
+        return contextSet;
     }
 
     public static int parsePriority(int index, List<String> args) throws ArgumentException {
@@ -241,42 +212,41 @@ public class ArgumentParser {
         }
     }
 
-    public static ImmutableContextSet parseContextSponge(int fromIndex, List<String> args) {
-        if (args.size() <= fromIndex) {
-            return ImmutableContextSet.empty();
-        }
-
-        MutableContextSet contextSet = MutableContextSet.create();
-        List<String> toQuery = args.subList(fromIndex, args.size());
-        for (String s : toQuery) {
-            int index = s.indexOf('=');
-            if (index != -1) {
-                String key = s.substring(0, index);
-                if (key.equals("")) {
-                    continue;
-                }
-
-                String value = s.substring(index + 1);
-                if (value.equals("")) {
-                    continue;
-                }
-
-                contextSet.add(key, value);
-            }
-        }
-
-        return contextSet.makeImmutable();
-    }
-
     public static UUID parseUserTarget(int index, List<String> args, LuckPermsPlugin plugin, Sender sender) {
         final String target = args.get(index);
-        return UserMainCommand.parseTargetUuid(target, plugin, sender);
+        return UserParentCommand.parseTargetUniqueId(target, plugin, sender);
     }
 
-    public abstract static class ArgumentException extends CommandException {}
-    public static class DetailedUsageException extends ArgumentException {}
-    public static class InvalidServerWorldException extends ArgumentException {}
-    public static class PastDateException extends ArgumentException {}
+    public abstract static class ArgumentException extends CommandException {
+
+    }
+
+    public static class DetailedUsageException extends ArgumentException {
+        @Override
+        public CommandResult handle(Sender sender) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public CommandResult handle(Sender sender, String label, Command<?> command) {
+            command.sendDetailedUsage(sender, label);
+            return CommandResult.INVALID_ARGS;
+        }
+
+        @Override
+        public CommandResult handle(Sender sender, GenericChildCommand command) {
+            command.sendDetailedUsage(sender);
+            return CommandResult.INVALID_ARGS;
+        }
+    }
+
+    public static class PastDateException extends ArgumentException {
+        @Override
+        public CommandResult handle(Sender sender) {
+            Message.PAST_DATE_ERROR.send(sender);
+            return CommandResult.INVALID_ARGS;
+        }
+    }
 
     public static class InvalidDateException extends ArgumentException {
         private final String invalidDate;
@@ -285,8 +255,10 @@ public class ArgumentParser {
             this.invalidDate = invalidDate;
         }
 
-        public String getInvalidDate() {
-            return this.invalidDate;
+        @Override
+        public CommandResult handle(Sender sender) {
+            Message.ILLEGAL_DATE_ERROR.send(sender, this.invalidDate);
+            return CommandResult.INVALID_ARGS;
         }
     }
 
@@ -297,8 +269,10 @@ public class ArgumentParser {
             this.invalidPriority = invalidPriority;
         }
 
-        public String getInvalidPriority() {
-            return this.invalidPriority;
+        @Override
+        public CommandResult handle(Sender sender) {
+            Message.META_INVALID_PRIORITY.send(sender, this.invalidPriority);
+            return CommandResult.INVALID_ARGS;
         }
     }
 

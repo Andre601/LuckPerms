@@ -25,9 +25,6 @@
 
 package me.lucko.luckperms.common.command.access;
 
-import me.lucko.luckperms.api.Contexts;
-import me.lucko.luckperms.api.Tristate;
-import me.lucko.luckperms.api.context.ContextSet;
 import me.lucko.luckperms.common.cacheddata.type.PermissionCache;
 import me.lucko.luckperms.common.calculator.processor.MapProcessor;
 import me.lucko.luckperms.common.calculator.result.TristateResult;
@@ -37,12 +34,16 @@ import me.lucko.luckperms.common.model.HolderType;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.model.Track;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.node.types.Inheritance;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+import me.lucko.luckperms.common.query.QueryOptionsImpl;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.verbose.event.PermissionCheckEvent;
 
-import java.util.Map;
+import net.luckperms.api.context.Context;
+import net.luckperms.api.context.ContextSet;
+import net.luckperms.api.util.Tristate;
+
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -108,48 +109,48 @@ public final class ArgumentPermissions {
         if (target instanceof User) {
             User targetUser = ((User) target);
             
-            if (targetUser.getUuid().equals(sender.getUuid())) {
+            if (targetUser.getUniqueId().equals(sender.getUniqueId())) {
                 // the sender is trying to edit themselves
-                Tristate ret = sender.getPermissionValue(base.getPermission() + ".modify.self");
-                if (ret != Tristate.UNDEFINED) {
-                    return !ret.asBoolean();
+                Tristate state = sender.getPermissionValue(base.getPermission() + ".modify.self");
+                if (state != Tristate.UNDEFINED) {
+                    return !state.asBoolean();
                 } else {
                     // fallback to the global perm if the one for the specific command is undefined
-                    Tristate globalRet = sender.getPermissionValue(USER_MODIFY_SELF);
-                    return !globalRet.asBoolean();
+                    Tristate globalState = sender.getPermissionValue(USER_MODIFY_SELF);
+                    return !globalState.asBoolean();
                 }
             } else {
                 // they're trying to edit another user
-                Tristate ret = sender.getPermissionValue(base.getPermission() + ".modify.others");
-                if (ret != Tristate.UNDEFINED) {
-                    return !ret.asBoolean();
+                Tristate state = sender.getPermissionValue(base.getPermission() + ".modify.others");
+                if (state != Tristate.UNDEFINED) {
+                    return !state.asBoolean();
                 } else {
                     // fallback to the global perm if the one for the specific command is undefined
-                    Tristate globalRet = sender.getPermissionValue(USER_MODIFY_OTHERS);
-                    return !globalRet.asBoolean();
+                    Tristate globalState = sender.getPermissionValue(USER_MODIFY_OTHERS);
+                    return !globalState.asBoolean();
                 }
             }
         } else if (target instanceof Group) {
             Group targetGroup = ((Group) target);
 
-            Tristate ret = sender.getPermissionValue(base.getPermission() + ".modify." + targetGroup.getName());
-            if (ret != Tristate.UNDEFINED) {
-                return !ret.asBoolean();
+            Tristate state = sender.getPermissionValue(base.getPermission() + ".modify." + targetGroup.getName());
+            if (state != Tristate.UNDEFINED) {
+                return !state.asBoolean();
             } else {
                 // fallback to the global perm if the one for the specific command is undefined
-                Tristate globalRet = sender.getPermissionValue(GROUP_MODIFY.apply(targetGroup.getName()));
-                return !globalRet.asBoolean();
+                Tristate globalState = sender.getPermissionValue(GROUP_MODIFY.apply(targetGroup.getName()));
+                return !globalState.asBoolean();
             }
         } else if (target instanceof Track) {
             Track targetTrack = ((Track) target);
 
-            Tristate ret = sender.getPermissionValue(base.getPermission() + ".modify." + targetTrack.getName());
-            if (ret != Tristate.UNDEFINED) {
-                return !ret.asBoolean();
+            Tristate state = sender.getPermissionValue(base.getPermission() + ".modify." + targetTrack.getName());
+            if (state != Tristate.UNDEFINED) {
+                return !state.asBoolean();
             } else {
                 // fallback to the global perm if the one for the specific command is undefined
-                Tristate globalRet = sender.getPermissionValue(TRACK_MODIFY.apply(targetTrack.getName()));
-                return !globalRet.asBoolean();
+                Tristate globalState = sender.getPermissionValue(TRACK_MODIFY.apply(targetTrack.getName()));
+                return !globalState.asBoolean();
             }
         } else {
             throw new IllegalStateException();
@@ -173,48 +174,48 @@ public final class ArgumentPermissions {
         if (target instanceof User) {
             User targetUser = ((User) target);
 
-            if (targetUser.getUuid().equals(sender.getUuid())) {
+            if (targetUser.getUniqueId().equals(sender.getUniqueId())) {
                 // the sender is trying to view themselves
-                Tristate ret = sender.getPermissionValue(base.getPermission() + ".view.self");
-                if (ret != Tristate.UNDEFINED) {
-                    return !ret.asBoolean();
+                Tristate state = sender.getPermissionValue(base.getPermission() + ".view.self");
+                if (state != Tristate.UNDEFINED) {
+                    return !state.asBoolean();
                 } else {
                     // fallback to the global perm if the one for the specific command is undefined
-                    Tristate globalRet = sender.getPermissionValue(USER_VIEW_SELF);
-                    return !globalRet.asBoolean();
+                    Tristate globalState = sender.getPermissionValue(USER_VIEW_SELF);
+                    return !globalState.asBoolean();
                 }
             } else {
                 // they're trying to view another user
-                Tristate ret = sender.getPermissionValue(base.getPermission() + ".view.others");
-                if (ret != Tristate.UNDEFINED) {
-                    return !ret.asBoolean();
+                Tristate state = sender.getPermissionValue(base.getPermission() + ".view.others");
+                if (state != Tristate.UNDEFINED) {
+                    return !state.asBoolean();
                 } else {
                     // fallback to the global perm if the one for the specific command is undefined
-                    Tristate globalRet = sender.getPermissionValue(USER_VIEW_OTHERS);
-                    return !globalRet.asBoolean();
+                    Tristate globalState = sender.getPermissionValue(USER_VIEW_OTHERS);
+                    return !globalState.asBoolean();
                 }
             }
         } else if (target instanceof Group) {
             Group targetGroup = ((Group) target);
 
-            Tristate ret = sender.getPermissionValue(base.getPermission() + ".view." + targetGroup.getName());
-            if (ret != Tristate.UNDEFINED) {
-                return !ret.asBoolean();
+            Tristate state = sender.getPermissionValue(base.getPermission() + ".view." + targetGroup.getName());
+            if (state != Tristate.UNDEFINED) {
+                return !state.asBoolean();
             } else {
                 // fallback to the global perm if the one for the specific command is undefined
-                Tristate globalRet = sender.getPermissionValue(GROUP_VIEW.apply(targetGroup.getName()));
-                return !globalRet.asBoolean();
+                Tristate globalState = sender.getPermissionValue(GROUP_VIEW.apply(targetGroup.getName()));
+                return !globalState.asBoolean();
             }
         } else if (target instanceof Track) {
             Track targetTrack = ((Track) target);
 
-            Tristate ret = sender.getPermissionValue(base.getPermission() + ".view." + targetTrack.getName());
-            if (ret != Tristate.UNDEFINED) {
-                return !ret.asBoolean();
+            Tristate state = sender.getPermissionValue(base.getPermission() + ".view." + targetTrack.getName());
+            if (state != Tristate.UNDEFINED) {
+                return !state.asBoolean();
             } else {
                 // fallback to the global perm if the one for the specific command is undefined
-                Tristate globalRet = sender.getPermissionValue(TRACK_VIEW.apply(targetTrack.getName()));
-                return !globalRet.asBoolean();
+                Tristate globalState = sender.getPermissionValue(TRACK_VIEW.apply(targetTrack.getName()));
+                return !globalState.asBoolean();
             }
         }
 
@@ -236,26 +237,26 @@ public final class ArgumentPermissions {
         }
 
         if (contextSet.isEmpty()) {
-            Tristate ret = sender.getPermissionValue(base.getPermission() + ".usecontext.global");
-            if (ret != Tristate.UNDEFINED) {
-                return !ret.asBoolean();
+            Tristate state = sender.getPermissionValue(base.getPermission() + ".usecontext.global");
+            if (state != Tristate.UNDEFINED) {
+                return !state.asBoolean();
             } else {
                 // fallback to the global perm if the one for the specific command is undefined
-                Tristate globalRet = sender.getPermissionValue(CONTEXT_USE_GLOBAL);
-                return !globalRet.asBoolean();
+                Tristate globalState = sender.getPermissionValue(CONTEXT_USE_GLOBAL);
+                return !globalState.asBoolean();
             }
         }
 
-        for (Map.Entry<String, String> context : contextSet.toSet()) {
-            Tristate ret = sender.getPermissionValue(base.getPermission() + ".usecontext." + context.getKey() + "." + context.getValue());
-            if (ret != Tristate.UNDEFINED) {
-                if (ret == Tristate.FALSE) {
+        for (Context context : contextSet) {
+            Tristate state = sender.getPermissionValue(base.getPermission() + ".usecontext." + context.getKey() + "." + context.getValue());
+            if (state != Tristate.UNDEFINED) {
+                if (state == Tristate.FALSE) {
                     return true;
                 }
             } else {
                 // fallback to the global perm if the one for the specific command is undefined
-                Tristate globalRet = sender.getPermissionValue(CONTEXT_USE.apply(context.getKey(), context.getValue()));
-                if (globalRet == Tristate.FALSE) {
+                Tristate globalState = sender.getPermissionValue(CONTEXT_USE.apply(context.getKey(), context.getValue()));
+                if (globalState == Tristate.FALSE) {
                     return true;
                 }
             }
@@ -298,13 +299,13 @@ public final class ArgumentPermissions {
             return false;
         }
 
-        User user = plugin.getUserManager().getIfLoaded(sender.getUuid());
+        User user = plugin.getUserManager().getIfLoaded(sender.getUniqueId());
         if (user == null) {
-            throw new IllegalStateException("Unable to get a User for " + sender.getUuid() + " - " + sender.getName());
+            throw new IllegalStateException("Unable to get a User for " + sender.getUniqueId() + " - " + sender.getName());
         }
 
-        PermissionCache permissionData = user.getCachedData().getPermissionData(Contexts.global().setContexts(contextSet));
-        TristateResult result = permissionData.getPermissionValue(NodeFactory.groupNode(targetGroupName), PermissionCheckEvent.Origin.INTERNAL);
+        PermissionCache permissionData = user.getCachedData().getPermissionData(QueryOptionsImpl.DEFAULT_CONTEXTUAL.toBuilder().context(contextSet).build());
+        TristateResult result = permissionData.checkPermission(Inheritance.key(targetGroupName), PermissionCheckEvent.Origin.INTERNAL);
         return result.result() != Tristate.TRUE || result.processorClass() != MapProcessor.class;
     }
     

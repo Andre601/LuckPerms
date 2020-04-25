@@ -25,16 +25,17 @@
 
 package me.lucko.luckperms.bungee.migration;
 
-import me.lucko.luckperms.api.event.cause.CreationCause;
 import me.lucko.luckperms.common.command.CommandResult;
-import me.lucko.luckperms.common.command.abstraction.SubCommand;
+import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.access.CommandPermission;
 import me.lucko.luckperms.common.commands.migration.MigrationUtils;
 import me.lucko.luckperms.common.locale.LocaleManager;
 import me.lucko.luckperms.common.locale.command.CommandSpec;
 import me.lucko.luckperms.common.locale.message.Message;
 import me.lucko.luckperms.common.model.PermissionHolder;
-import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.node.types.Inheritance;
+import me.lucko.luckperms.common.node.types.Prefix;
+import me.lucko.luckperms.common.node.types.Suffix;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.util.Iterators;
@@ -46,12 +47,15 @@ import net.alpenblock.bungeeperms.Group;
 import net.alpenblock.bungeeperms.PermEntity;
 import net.alpenblock.bungeeperms.Server;
 import net.alpenblock.bungeeperms.World;
+import net.luckperms.api.context.DefaultContextKeys;
+import net.luckperms.api.event.cause.CreationCause;
+import net.luckperms.api.model.data.DataType;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class MigrationBungeePerms extends SubCommand<Object> {
+public class MigrationBungeePerms extends ChildCommand<Object> {
     public MigrationBungeePerms(LocaleManager locale) {
         super(CommandSpec.MIGRATION_COMMAND.localize(locale), "bungeeperms", CommandPermission.MIGRATION, Predicates.alwaysFalse());
     }
@@ -83,7 +87,7 @@ public class MigrationBungeePerms extends SubCommand<Object> {
         // Migrate all groups.
         log.log("Starting group migration.");
         AtomicInteger groupCount = new AtomicInteger(0);
-        Iterators.iterate(groups, g -> {
+        Iterators.tryIterate(groups, g -> {
             int groupWeight = maxWeight - g.getRank();
 
             // Make a LuckPerms group for the one being migrated
@@ -105,7 +109,7 @@ public class MigrationBungeePerms extends SubCommand<Object> {
         // Increment the max weight from the group migrations. All user meta should override.
         int userWeight = maxWeight + 5;
 
-        Iterators.iterate(bp.getPermissionsManager().getBackEnd().loadUsers(), u -> {
+        Iterators.tryIterate(bp.getPermissionsManager().getBackEnd().loadUsers(), u -> {
             if (u.getUUID() == null) {
                 log.logError("Could not parse UUID for user: " + u.getName());
                 return;
@@ -117,13 +121,15 @@ public class MigrationBungeePerms extends SubCommand<Object> {
             migrateHolder(u, u.getGroupsString(), userWeight, user);
 
             plugin.getStorage().saveUser(user);
-            plugin.getUserManager().cleanup(user);
+            plugin.getUserManager().getHouseKeeper().cleanup(user.getUniqueId());
 
             log.logProgress("Migrated {} users so far.", userCount.incrementAndGet(), ProgressLogger.DEFAULT_NOTIFY_FREQUENCY);
         });
 
         log.log("Migrated " + userCount.get() + " users.");
         log.log("Success! Migration complete.");
+        log.log("Don't forget to remove the BungeePerms jar from your plugins folder & restart the server. " +
+                "LuckPerms may not take over as the server permission handler until this is done.");
         return CommandResult.SUCCESS;
     }
 
@@ -131,21 +137,21 @@ public class MigrationBungeePerms extends SubCommand<Object> {
         // Migrate global perms
         for (String perm : entity.getPerms()) {
             if (perm.isEmpty()) continue;
-            holder.setPermission(MigrationUtils.parseNode(perm, true).build());
+            holder.setNode(DataType.NORMAL, MigrationUtils.parseNode(perm, true).build(), true);
         }
 
         // Migrate per-server perms
         for (Map.Entry<String, Server> e : entity.getServers().entrySet()) {
             for (String perm : e.getValue().getPerms()) {
                 if (perm.isEmpty()) continue;
-                holder.setPermission(MigrationUtils.parseNode(perm, true).setServer(e.getKey()).build());
+                holder.setNode(DataType.NORMAL, MigrationUtils.parseNode(perm, true).withContext(DefaultContextKeys.SERVER_KEY, e.getKey()).build(), true);
             }
 
             // Migrate per-world perms
             for (Map.Entry<String, World> we : e.getValue().getWorlds().entrySet()) {
                 for (String perm : we.getValue().getPerms()) {
                     if (perm.isEmpty()) continue;
-                    holder.setPermission(MigrationUtils.parseNode(perm, true).setServer(e.getKey()).setWorld(we.getKey()).build());
+                    holder.setNode(DataType.NORMAL, MigrationUtils.parseNode(perm, true).withContext(DefaultContextKeys.SERVER_KEY, e.getKey()).withContext(DefaultContextKeys.WORLD_KEY, we.getKey()).build(), true);
                 }
             }
         }
@@ -153,7 +159,7 @@ public class MigrationBungeePerms extends SubCommand<Object> {
         // Migrate any parent groups
         for (String inherit : parents) {
             if (inherit.isEmpty()) continue;
-            holder.setPermission(NodeFactory.buildGroupNode(MigrationUtils.standardizeName(inherit)).build());
+            holder.setNode(DataType.NORMAL, Inheritance.builder(MigrationUtils.standardizeName(inherit)).build(), true);
         }
 
         // Migrate prefix and suffix
@@ -161,10 +167,10 @@ public class MigrationBungeePerms extends SubCommand<Object> {
         String suffix = entity.getSuffix();
 
         if (prefix != null && !prefix.isEmpty()) {
-            holder.setPermission(NodeFactory.buildPrefixNode(weight, prefix).build());
+            holder.setNode(DataType.NORMAL, Prefix.builder(prefix, weight).build(), true);
         }
         if (suffix != null && !suffix.isEmpty()) {
-            holder.setPermission(NodeFactory.buildSuffixNode(weight, suffix).build());
+            holder.setNode(DataType.NORMAL, Suffix.builder(suffix, weight).build(), true);
         }
     }
 }

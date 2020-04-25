@@ -27,14 +27,18 @@ package me.lucko.luckperms.sponge.service;
 
 import com.google.common.collect.ImmutableSet;
 
-import me.lucko.luckperms.api.Tristate;
-import me.lucko.luckperms.api.context.ContextSet;
-import me.lucko.luckperms.api.context.ImmutableContextSet;
-import me.lucko.luckperms.sponge.service.context.DelegatingContextSet;
-import me.lucko.luckperms.sponge.service.context.DelegatingImmutableContextSet;
+import me.lucko.luckperms.common.context.contextset.ContextImpl;
+import me.lucko.luckperms.common.context.contextset.ImmutableContextSetImpl;
+import me.lucko.luckperms.sponge.service.context.ForwardingContextSet;
+import me.lucko.luckperms.sponge.service.context.ForwardingImmutableContextSet;
+
+import net.luckperms.api.context.ContextSet;
+import net.luckperms.api.context.ImmutableContextSet;
+import net.luckperms.api.util.Tristate;
 
 import org.spongepowered.api.service.context.Context;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -49,15 +53,19 @@ public final class CompatibilityUtil {
     public static ImmutableContextSet convertContexts(Set<Context> contexts) {
         Objects.requireNonNull(contexts, "contexts");
 
-        if (contexts instanceof DelegatingContextSet) {
-            return ((DelegatingContextSet) contexts).getDelegate().makeImmutable();
+        if (contexts instanceof ForwardingContextSet) {
+            return ((ForwardingContextSet) contexts).delegate().immutableCopy();
         }
 
         if (contexts.isEmpty()) {
-            return ImmutableContextSet.empty();
+            return ImmutableContextSetImpl.EMPTY;
         }
 
-        return ImmutableContextSet.fromEntries(contexts);
+        ImmutableContextSet.Builder builder = new ImmutableContextSetImpl.BuilderImpl();
+        for (Map.Entry<String, String> entry : contexts) {
+            builder.add(new ContextImpl(entry.getKey(), entry.getValue()));
+        }
+        return builder.build();
     }
 
     public static Set<Context> convertContexts(ContextSet contexts) {
@@ -67,7 +75,7 @@ public final class CompatibilityUtil {
             return EMPTY;
         }
 
-        return new DelegatingImmutableContextSet(contexts.makeImmutable());
+        return new ForwardingImmutableContextSet(contexts.immutableCopy());
     }
 
     public static org.spongepowered.api.util.Tristate convertTristate(Tristate tristate) {

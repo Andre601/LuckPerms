@@ -27,20 +27,23 @@ package me.lucko.luckperms.common.api.implementation;
 
 import com.google.common.base.Preconditions;
 
-import me.lucko.luckperms.api.DataMutateResult;
-import me.lucko.luckperms.api.StandardNodeEquality;
-import me.lucko.luckperms.api.caching.UserData;
-import me.lucko.luckperms.common.model.NodeMapType;
+import me.lucko.luckperms.common.cacheddata.UserCachedDataManager;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.node.types.Inheritance;
+import me.lucko.luckperms.common.verbose.event.MetaCheckEvent;
+
+import net.luckperms.api.model.data.DataMutateResult;
+import net.luckperms.api.model.data.DataType;
+import net.luckperms.api.node.NodeEqualityPredicate;
+import net.luckperms.api.query.QueryOptions;
 
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.Objects;
 import java.util.UUID;
 
-public class ApiUser extends ApiPermissionHolder implements me.lucko.luckperms.api.User {
-    public static User cast(me.lucko.luckperms.api.User u) {
+public class ApiUser extends ApiPermissionHolder implements net.luckperms.api.model.user.User {
+    public static User cast(net.luckperms.api.model.user.User u) {
         Preconditions.checkState(u instanceof ApiUser, "Illegal instance " + u.getClass() + " cannot be handled by this implementation.");
         return ((ApiUser) u).getHandle();
     }
@@ -58,28 +61,33 @@ public class ApiUser extends ApiPermissionHolder implements me.lucko.luckperms.a
     }
 
     @Override
-    public @NonNull UUID getUuid() {
-        return this.handle.getUuid();
+    public @NonNull UUID getUniqueId() {
+        return this.handle.getUniqueId();
     }
 
     @Override
-    public String getName() {
-        return this.handle.getName().orElse(null);
+    public String getUsername() {
+        return this.handle.getUsername().orElse(null);
     }
 
     @Override
     public @NonNull String getPrimaryGroup() {
-        return this.handle.getPrimaryGroup().getValue();
+        QueryOptions queryOptions = this.handle.getPlugin().getQueryOptionsForUser(this.handle)
+                .orElseGet(() -> this.handle.getPlugin().getContextManager().getStaticQueryOptions());
+
+        String value = this.handle.getCachedData().getMetaData(queryOptions).getPrimaryGroup(MetaCheckEvent.Origin.LUCKPERMS_API);
+        Objects.requireNonNull(value, "value"); // assert nonnull
+        return value;
     }
 
     @Override
     public @NonNull DataMutateResult setPrimaryGroup(@NonNull String group) {
         Objects.requireNonNull(group, "group");
         if (getPrimaryGroup().equalsIgnoreCase(group)) {
-            return DataMutateResult.ALREADY_HAS;
+            return DataMutateResult.FAIL_ALREADY_HAS;
         }
 
-        if (!this.handle.hasPermission(NodeMapType.ENDURING, NodeFactory.buildGroupNode(group.toLowerCase()).build(), StandardNodeEquality.IGNORE_EXPIRY_TIME_AND_VALUE).asBoolean()) {
+        if (!this.handle.hasNode(DataType.NORMAL, Inheritance.builder(group.toLowerCase()).build(), NodeEqualityPredicate.IGNORE_EXPIRY_TIME_AND_VALUE).asBoolean()) {
             return DataMutateResult.FAIL;
         }
 
@@ -88,20 +96,8 @@ public class ApiUser extends ApiPermissionHolder implements me.lucko.luckperms.a
     }
 
     @Override
-    public @NonNull UserData getCachedData() {
+    public @NonNull UserCachedDataManager getCachedData() {
         return this.handle.getCachedData();
-    }
-
-    @Override
-    @Deprecated
-    public void refreshPermissions() {
-
-    }
-
-    @Override
-    @Deprecated
-    public void setupDataCache() {
-
     }
 
     @Override

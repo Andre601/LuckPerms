@@ -25,9 +25,6 @@
 
 package me.lucko.luckperms.nukkit;
 
-import me.lucko.luckperms.api.Contexts;
-import me.lucko.luckperms.api.LuckPermsApi;
-import me.lucko.luckperms.api.event.user.UserDataRecalculateEvent;
 import me.lucko.luckperms.common.api.LuckPermsApiProvider;
 import me.lucko.luckperms.common.api.implementation.ApiUser;
 import me.lucko.luckperms.common.calculator.CalculatorFactory;
@@ -49,17 +46,21 @@ import me.lucko.luckperms.nukkit.calculator.NukkitCalculatorFactory;
 import me.lucko.luckperms.nukkit.context.NukkitContextManager;
 import me.lucko.luckperms.nukkit.context.WorldCalculator;
 import me.lucko.luckperms.nukkit.inject.PermissionDefault;
-import me.lucko.luckperms.nukkit.inject.permissible.LPPermissible;
+import me.lucko.luckperms.nukkit.inject.permissible.LuckPermsPermissible;
 import me.lucko.luckperms.nukkit.inject.permissible.PermissibleInjector;
 import me.lucko.luckperms.nukkit.inject.permissible.PermissibleMonitoringInjector;
 import me.lucko.luckperms.nukkit.inject.server.InjectorDefaultsMap;
 import me.lucko.luckperms.nukkit.inject.server.InjectorPermissionMap;
 import me.lucko.luckperms.nukkit.inject.server.InjectorSubscriptionMap;
-import me.lucko.luckperms.nukkit.inject.server.LPDefaultsMap;
-import me.lucko.luckperms.nukkit.inject.server.LPPermissionMap;
-import me.lucko.luckperms.nukkit.inject.server.LPSubscriptionMap;
+import me.lucko.luckperms.nukkit.inject.server.LuckPermsDefaultsMap;
+import me.lucko.luckperms.nukkit.inject.server.LuckPermsPermissionMap;
+import me.lucko.luckperms.nukkit.inject.server.LuckPermsSubscriptionMap;
 import me.lucko.luckperms.nukkit.listeners.NukkitConnectionListener;
 import me.lucko.luckperms.nukkit.listeners.NukkitPlatformListener;
+
+import net.luckperms.api.LuckPerms;
+import net.luckperms.api.event.user.UserDataRecalculateEvent;
+import net.luckperms.api.query.QueryOptions;
 
 import cn.nukkit.Player;
 import cn.nukkit.command.PluginCommand;
@@ -87,9 +88,9 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
     private StandardGroupManager groupManager;
     private StandardTrackManager trackManager;
     private NukkitContextManager contextManager;
-    private LPSubscriptionMap subscriptionMap;
-    private LPPermissionMap permissionMap;
-    private LPDefaultsMap defaultPermissionMap;
+    private LuckPermsSubscriptionMap subscriptionMap;
+    private LuckPermsPermissionMap permissionMap;
+    private LuckPermsDefaultsMap defaultPermissionMap;
 
     public LPNukkitPlugin(LPNukkitBootstrap bootstrap) {
         this.bootstrap = bootstrap;
@@ -124,9 +125,9 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
 
     @Override
     protected void registerCommands() {
-        this.commandManager = new NukkitCommandExecutor(this);
-        PluginCommand cmd = (PluginCommand) this.bootstrap.getServer().getPluginCommand("luckperms");
-        cmd.setExecutor(this.commandManager);
+        PluginCommand<?> command = (PluginCommand<?>) this.bootstrap.getServer().getPluginCommand("luckperms");
+        this.commandManager = new NukkitCommandExecutor(this, command);
+        this.commandManager.register();
     }
 
     @Override
@@ -167,13 +168,13 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
     }
 
     @Override
-    protected AbstractEventBus provideEventBus(LuckPermsApiProvider apiProvider) {
+    protected AbstractEventBus<?> provideEventBus(LuckPermsApiProvider apiProvider) {
         return new NukkitEventBus(this, apiProvider);
     }
 
     @Override
-    protected void registerApiOnPlatform(LuckPermsApi api) {
-        this.bootstrap.getServer().getServiceManager().register(LuckPermsApi.class, api, this.bootstrap, ServicePriority.NORMAL);
+    protected void registerApiOnPlatform(LuckPerms api) {
+        this.bootstrap.getServer().getServiceManager().register(LuckPerms.class, api, this.bootstrap, ServicePriority.NORMAL);
     }
 
     @Override
@@ -206,7 +207,7 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
         if (getConfiguration().get(ConfigKeys.AUTO_OP)) {
             getApiProvider().getEventBus().subscribe(UserDataRecalculateEvent.class, event -> {
                 User user = ApiUser.cast(event.getUser());
-                Optional<Player> player = getBootstrap().getPlayer(user.getUuid());
+                Optional<Player> player = getBootstrap().getPlayer(user.getUniqueId());
                 player.ifPresent(this::refreshAutoOp);
             });
         }
@@ -219,7 +220,7 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
                     if (user != null) {
                         this.bootstrap.getScheduler().executeSync(() -> {
                             try {
-                                LPPermissible lpPermissible = new LPPermissible(player, user, this);
+                                LuckPermsPermissible lpPermissible = new LuckPermsPermissible(player, user, this);
                                 PermissibleInjector.inject(player, lpPermissible);
                             } catch (Throwable t) {
                                 t.printStackTrace();
@@ -250,7 +251,7 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
             final User user = getUserManager().getIfLoaded(player.getUniqueId());
             if (user != null) {
                 user.getCachedData().invalidate();
-                getUserManager().unload(user);
+                getUserManager().unload(user.getUniqueId());
             }
         }
 
@@ -270,7 +271,7 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
         boolean value;
 
         if (user != null) {
-            Map<String, Boolean> permData = user.getCachedData().getPermissionData(this.contextManager.getApplicableContexts(player)).getImmutableBacking();
+            Map<String, Boolean> permData = user.getCachedData().getPermissionData(this.contextManager.getQueryOptions(player)).getPermissionMap();
             value = permData.getOrDefault("luckperms.autoop", false);
         } else {
             value = false;
@@ -289,8 +290,8 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
     }
 
     @Override
-    public Optional<Contexts> getContextForUser(User user) {
-        return this.bootstrap.getPlayer(user.getUuid()).map(player -> this.contextManager.getApplicableContexts(player));
+    public Optional<QueryOptions> getQueryOptionsForUser(User user) {
+        return this.bootstrap.getPlayer(user.getUniqueId()).map(player -> this.contextManager.getQueryOptions(player));
     }
 
     @Override
@@ -340,27 +341,27 @@ public class LPNukkitPlugin extends AbstractLuckPermsPlugin {
         return this.contextManager;
     }
 
-    public LPSubscriptionMap getSubscriptionMap() {
+    public LuckPermsSubscriptionMap getSubscriptionMap() {
         return this.subscriptionMap;
     }
 
-    public void setSubscriptionMap(LPSubscriptionMap subscriptionMap) {
+    public void setSubscriptionMap(LuckPermsSubscriptionMap subscriptionMap) {
         this.subscriptionMap = subscriptionMap;
     }
 
-    public LPPermissionMap getPermissionMap() {
+    public LuckPermsPermissionMap getPermissionMap() {
         return this.permissionMap;
     }
 
-    public void setPermissionMap(LPPermissionMap permissionMap) {
+    public void setPermissionMap(LuckPermsPermissionMap permissionMap) {
         this.permissionMap = permissionMap;
     }
 
-    public LPDefaultsMap getDefaultPermissionMap() {
+    public LuckPermsDefaultsMap getDefaultPermissionMap() {
         return this.defaultPermissionMap;
     }
 
-    public void setDefaultPermissionMap(LPDefaultsMap defaultPermissionMap) {
+    public void setDefaultPermissionMap(LuckPermsDefaultsMap defaultPermissionMap) {
         this.defaultPermissionMap = defaultPermissionMap;
     }
 

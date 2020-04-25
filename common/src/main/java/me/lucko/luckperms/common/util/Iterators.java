@@ -34,51 +34,63 @@ import java.util.function.Function;
 public final class Iterators {
     private Iterators() {}
 
-    public static <I> void iterate(Iterable<I> iterable, Consumer<I> action) {
-        for (I i : iterable) {
+    public static <E> boolean tryIterate(Iterable<E> iterable, Throwing.Consumer<E> action) {
+        boolean success = true;
+        for (E element : iterable) {
             try {
-                action.accept(i);
+                action.accept(element);
             } catch (Exception e) {
                 e.printStackTrace();
+                success = false;
             }
         }
+        return success;
     }
 
-    public static <I, O> void iterate(Iterable<I> iterable, Function<I, O> mapping, Consumer<O> action) {
-        for (I i : iterable) {
+    public static <I, O> boolean tryIterate(Iterable<I> iterable, Function<I, O> mapping, Consumer<O> action) {
+        boolean success = true;
+        for (I element : iterable) {
             try {
-                action.accept(mapping.apply(i));
+                action.accept(mapping.apply(element));
             } catch (Exception e) {
                 e.printStackTrace();
+                success = false;
             }
         }
+        return success;
     }
 
-    public static <I> void iterate(I[] array, Consumer<I> action) {
-        for (I i : array) {
+    public static <E> boolean tryIterate(E[] array, Consumer<E> action) {
+        boolean success = true;
+        for (E element : array) {
             try {
-                action.accept(i);
+                action.accept(element);
             } catch (Exception e) {
                 e.printStackTrace();
+                success = false;
             }
         }
+        return success;
     }
 
-    public static <I, O> void iterate(I[] array, Function<I, O> mapping, Consumer<O> action) {
-        for (I i : array) {
+    public static <I, O> boolean tryIterate(I[] array, Function<I, O> mapping, Consumer<O> action) {
+        boolean success = true;
+        for (I element : array) {
             try {
-                action.accept(mapping.apply(i));
+                action.accept(mapping.apply(element));
             } catch (Exception e) {
                 e.printStackTrace();
+                success = false;
             }
         }
+        return success;
     }
 
-    public static <T> List<List<T>> divideIterable(Iterable<T> source, int size) {
-        List<List<T>> lists = new ArrayList<>();
-        Iterator<T> it = source.iterator();
+    public static <E> List<List<E>> divideIterable(Iterable<E> source, int size) {
+        List<List<E>> lists = new ArrayList<>();
+        Iterator<E> it = source.iterator();
         while (it.hasNext()) {
-            List<T> subList = new ArrayList<>();
+            List<E> subList = new ArrayList<>();
             for (int i = 0; it.hasNext() && i < size; i++) {
                 subList.add(it.next());
             }

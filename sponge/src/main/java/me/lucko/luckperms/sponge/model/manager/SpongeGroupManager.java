@@ -32,12 +32,9 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 
-import me.lucko.luckperms.api.HeldPermission;
-import me.lucko.luckperms.api.Tristate;
-import me.lucko.luckperms.api.context.ImmutableContextSet;
-import me.lucko.luckperms.api.event.cause.CreationCause;
 import me.lucko.luckperms.common.bulkupdate.comparison.Constraint;
 import me.lucko.luckperms.common.bulkupdate.comparison.StandardComparison;
+import me.lucko.luckperms.common.context.contextset.ImmutableContextSetImpl;
 import me.lucko.luckperms.common.model.manager.group.AbstractGroupManager;
 import me.lucko.luckperms.common.storage.misc.DataConstraints;
 import me.lucko.luckperms.common.util.ImmutableCollectors;
@@ -48,6 +45,11 @@ import me.lucko.luckperms.sponge.service.ProxyFactory;
 import me.lucko.luckperms.sponge.service.model.LPSubject;
 import me.lucko.luckperms.sponge.service.model.LPSubjectCollection;
 import me.lucko.luckperms.sponge.service.model.LPSubjectReference;
+
+import net.luckperms.api.context.ImmutableContextSet;
+import net.luckperms.api.event.cause.CreationCause;
+import net.luckperms.api.node.HeldNode;
+import net.luckperms.api.util.Tristate;
 
 import org.spongepowered.api.service.permission.PermissionService;
 import org.spongepowered.api.service.permission.SubjectCollection;
@@ -164,15 +166,15 @@ public class SpongeGroupManager extends AbstractGroupManager<SpongeGroup> implem
     @Override
     public CompletableFuture<ImmutableCollection<LPSubject>> loadSubjects(Set<String> identifiers) {
         return CompletableFuture.supplyAsync(() -> {
-            ImmutableSet.Builder<LPSubject> ret = ImmutableSet.builder();
+            ImmutableSet.Builder<LPSubject> subjects = ImmutableSet.builder();
             for (String id : identifiers) {
                 if (!DataConstraints.GROUP_NAME_TEST.test(id)) {
                     continue;
                 }
-                ret.add(loadSubject(id.toLowerCase()).join());
+                subjects.add(loadSubject(id.toLowerCase()).join());
             }
 
-            return ret.build();
+            return subjects.build();
         }, this.plugin.getBootstrap().getScheduler().async());
     }
 
@@ -189,32 +191,32 @@ public class SpongeGroupManager extends AbstractGroupManager<SpongeGroup> implem
     @Override
     public CompletableFuture<ImmutableMap<LPSubjectReference, Boolean>> getAllWithPermission(String permission) {
         return CompletableFuture.supplyAsync(() -> {
-            ImmutableMap.Builder<LPSubjectReference, Boolean> ret = ImmutableMap.builder();
+            ImmutableMap.Builder<LPSubjectReference, Boolean> builder = ImmutableMap.builder();
 
-            List<HeldPermission<String>> lookup = this.plugin.getStorage().getGroupsWithPermission(Constraint.of(StandardComparison.EQUAL, permission)).join();
-            for (HeldPermission<String> holder : lookup) {
-                if (holder.asNode().getFullContexts().equals(ImmutableContextSet.empty())) {
-                    ret.put(getService().getReferenceFactory().obtain(getIdentifier(), holder.getHolder()), holder.getValue());
+            List<HeldNode<String>> lookup = this.plugin.getStorage().getGroupsWithPermission(Constraint.of(StandardComparison.EQUAL, permission)).join();
+            for (HeldNode<String> holder : lookup) {
+                if (holder.getNode().getContexts().equals(ImmutableContextSetImpl.EMPTY)) {
+                    builder.put(getService().getReferenceFactory().obtain(getIdentifier(), holder.getHolder()), holder.getNode().getValue());
                 }
             }
 
-            return ret.build();
+            return builder.build();
         }, this.plugin.getBootstrap().getScheduler().async());
     }
 
     @Override
     public CompletableFuture<ImmutableMap<LPSubjectReference, Boolean>> getAllWithPermission(ImmutableContextSet contexts, String permission) {
         return CompletableFuture.supplyAsync(() -> {
-            ImmutableMap.Builder<LPSubjectReference, Boolean> ret = ImmutableMap.builder();
+            ImmutableMap.Builder<LPSubjectReference, Boolean> builder = ImmutableMap.builder();
 
-            List<HeldPermission<String>> lookup = this.plugin.getStorage().getGroupsWithPermission(Constraint.of(StandardComparison.EQUAL, permission)).join();
-            for (HeldPermission<String> holder : lookup) {
-                if (holder.asNode().getFullContexts().equals(contexts)) {
-                    ret.put(getService().getReferenceFactory().obtain(getIdentifier(), holder.getHolder()), holder.getValue());
+            List<HeldNode<String>> lookup = this.plugin.getStorage().getGroupsWithPermission(Constraint.of(StandardComparison.EQUAL, permission)).join();
+            for (HeldNode<String> holder : lookup) {
+                if (holder.getNode().getContexts().equals(contexts)) {
+                    builder.put(getService().getReferenceFactory().obtain(getIdentifier(), holder.getHolder()), holder.getNode().getValue());
                 }
             }
 
-            return ret.build();
+            return builder.build();
         }, this.plugin.getBootstrap().getScheduler().async());
     }
 
@@ -222,7 +224,7 @@ public class SpongeGroupManager extends AbstractGroupManager<SpongeGroup> implem
     public ImmutableMap<LPSubject, Boolean> getLoadedWithPermission(String permission) {
         return getAll().values().stream()
                 .map(SpongeGroup::sponge)
-                .map(sub -> Maps.immutableEntry(sub, sub.getPermissionValue(ImmutableContextSet.empty(), permission)))
+                .map(sub -> Maps.immutableEntry(sub, sub.getPermissionValue(ImmutableContextSetImpl.EMPTY, permission)))
                 .filter(pair -> pair.getValue() != Tristate.UNDEFINED)
                 .collect(ImmutableCollectors.toMap(Map.Entry::getKey, sub -> sub.getValue().asBoolean()));
     }

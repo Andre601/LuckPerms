@@ -26,18 +26,12 @@
 package me.lucko.luckperms.common.dependencies;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.io.ByteStreams;
 
 import me.lucko.luckperms.common.dependencies.relocation.Relocation;
 import me.lucko.luckperms.common.dependencies.relocation.RelocationHelper;
 
-import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.net.URLConnection;
-import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 
@@ -46,62 +40,62 @@ public enum Dependency {
     ASM(
             "org.ow2.asm",
             "asm",
-            "6.2.1",
-            "FGDbbDPMmchOXLMORrAX5NHMmn+8F0EB1vhIKbtkwIU="
+            "7.1",
+            "SrL6K20sycyx6qBeoynEB7R7E+0pFfYvjEuMyWJY1N4="
     ),
     ASM_COMMONS(
             "org.ow2.asm",
             "asm-commons",
-            "6.2.1",
-            "P1eNMe8w+UttH0SBL0H+T5inzUKvNTNfXUhmqzuQGGU="
+            "7.1",
+            "5VkEidjxmE2Fv+q9Oxc3TFnCiuCdSOxKDrvQGVns01g="
     ),
     JAR_RELOCATOR(
             "me.lucko",
             "jar-relocator",
-            "1.3",
-            "mmz3ltQbS8xXGA2scM0ZH6raISlt4nukjCiU2l9Jxfs="
+            "1.4",
+            "1RsiF3BiVztjlfTA+svDCuoDSGFuSpTZYHvUK8yBx8I="
     ),
 
     TEXT(
             "net{}kyori",
             "text-api",
-            "3.0.0",
-            "/d7o/eZkZx/naJE+pMg1KqIzL8TWxWjA4yxjv8/10Cg=",
+            "3.0.3",
+            "/EP/woKCSL0wKQ59zrGx6xPrByI9tY9BPHklf5NNHws=",
             Relocation.of("text", "net{}kyori{}text")
     ),
     TEXT_SERIALIZER_GSON(
             "net{}kyori",
             "text-serializer-gson",
-            "3.0.0",
-            "zc1ePBBRCjSoNQiNqsBL+6TYRmaUPyEZtj1LhCtViv0=",
+            "3.0.3",
+            "WmOA7vIcGR679MQxIe6Bw7gbWxUEpGabwKsAumzHApw=",
             Relocation.of("text", "net{}kyori{}text")
     ),
     TEXT_SERIALIZER_LEGACY(
             "net{}kyori",
             "text-serializer-legacy",
-            "3.0.0",
-            "Zns1sKvALAt3Sn0Px+vENv1XQ9y80E1cSzzDN46C9rQ=",
+            "3.0.3",
+            "Ug2Ji/0FWxKLUssfOgkIZ2UWcAptdTm8KxM8ObAoNIU=",
             Relocation.of("text", "net{}kyori{}text")
     ),
     TEXT_ADAPTER_BUKKIT(
             "net{}kyori",
             "text-adapter-bukkit",
-            "3.0.2",
-            "VnbfELmOHV6DVidHJql6gmsCjfhABEnF6q9LTezUrQg=",
+            "3.0.3",
+            "K1ib03ajCNm7CkVjX42o+Mg6M+eUaAfo29CBvfu+++o=",
             Relocation.of("text", "net{}kyori{}text")
     ),
     TEXT_ADAPTER_BUNGEECORD(
             "net{}kyori",
             "text-adapter-bungeecord",
-            "3.0.2",
-            "ZmCmc67danKpZru8rJsDppJZ+f8joquULZI8y/YX4ks=",
+            "3.0.3",
+            "klLpz+PWAoZzR+nyxUu6ohFKtrGya8tq/lWU6GfSVGY=",
             Relocation.of("text", "net{}kyori{}text")
     ),
     TEXT_ADAPTER_SPONGEAPI(
             "net{}kyori",
             "text-adapter-spongeapi",
-            "3.0.2",
-            "WPWFw1g8niEGgymV9PdyLADMSL6+UQ7FKdtxnJb79JE=",
+            "3.0.3",
+            "tRHQOThbp3ECZB0WbrgPZdKmvNA28K9bBwoshGWpTFQ=",
             Relocation.of("text", "net{}kyori{}text")
     ),
     EVENT(
@@ -114,44 +108,51 @@ public enum Dependency {
     CAFFEINE(
             "com{}github{}ben-manes{}caffeine",
             "caffeine",
-            "2.7.0",
-            "Fw8phtcHwN+UIo9X1SV7fxH4hv1CtTthMWp0mKx+B/8=",
+            "2.8.1",
+            "H2fbGQaw2xx+DXnAv+NH+wTwSWCYgymUZUsS73nfoak=",
             Relocation.of("caffeine", "com{}github{}benmanes{}caffeine")
     ),
     OKIO(
             "com{}squareup{}" + RelocationHelper.OKIO_STRING,
             RelocationHelper.OKIO_STRING,
-            "1.17.3",
-            "yxja86IIrjirnYJUP/uT4fGF6GPIoOUsw3L/46WPVUk=",
+            "1.17.5",
+            "Gaf/SNhtPPRJf38lD78pX0MME6Uo3Vt7ID+CGAK4hq0=",
             Relocation.of(RelocationHelper.OKIO_STRING, RelocationHelper.OKIO_STRING)
     ),
     OKHTTP(
             "com{}squareup{}" + RelocationHelper.OKHTTP3_STRING,
             "okhttp",
-            "3.14.1",
-            "WmvmkWUwdqpk3NNh0uRF5AYLS13IgrH2uknnnd/D5WM=",
+            "3.14.7",
+            "Yg1PpDxcal72JXYCBKiHmeHkpl4ceh2NoC4GHEy7gAA=",
             Relocation.of(RelocationHelper.OKHTTP3_STRING, RelocationHelper.OKHTTP3_STRING),
             Relocation.of(RelocationHelper.OKIO_STRING, RelocationHelper.OKIO_STRING)
+    ),
+    BYTEBUDDY(
+            "net{}bytebuddy",
+            "byte-buddy",
+            "1.10.9",
+            "B7nKbi+XDLA/SyVlHfHy/OJx1JG0TgQJgniHeG9pLU0=",
+            Relocation.of("bytebuddy", "net{}bytebuddy")
     ),
     COMMODORE(
             "me{}lucko",
             "commodore",
-            "1.3",
-            "3+fpQ9eQpO73jm4z7G+6x+q87b8NwjY1KN+nmNGjplk=",
+            "1.7",
+            "ncwmvNFfvyZf1Pa0v4fWyMR0Jxe1v1ZgXOiI255IX5Q=",
             Relocation.of("commodore", "me{}lucko{}commodore")
     ),
     MARIADB_DRIVER(
             "org{}mariadb{}jdbc",
             "mariadb-java-client",
-            "2.4.0",
-            "G346tblA35aJS8q1a3dQVZdU7Q7isGMzhwftoz6MZqU=",
+            "2.6.0",
+            "fgiCp29Z7X38ULAJNsxZ1wFIVT2u3trSx/VCMxTlA6g=",
             Relocation.of("mariadb", "org{}mariadb{}jdbc")
     ),
     MYSQL_DRIVER(
             "mysql",
             "mysql-connector-java",
-            "5.1.47",
-            "5PhASPOSsrN7r0ao1QjkuN2uKG0gnvmVueEYhSAcGSM=",
+            "5.1.48",
+            "VuJsqqOCH1rkr0T5x09mz4uE6gFRatOAPLsOkEm27Kg=",
             Relocation.of("mysql", "com{}mysql")
     ),
     POSTGRESQL_DRIVER(
@@ -164,60 +165,61 @@ public enum Dependency {
     H2_DRIVER(
             "com.h2database",
             "h2",
-            "1.4.198",
-            "Mt1rFJy3IqpMLdTUCnSpzUHjKsWaTnVaZuV1NmDWHUY="
+            // seems to be a compat bug in 1.4.200 with older dbs
+            // see: https://github.com/h2database/h2database/issues/2078
+            "1.4.199",
+            "MSWhZ0O8a0z7thq7p4MgPx+2gjCqD9yXiY95b5ml1C4="
             // we don't apply relocations to h2 - it gets loaded via
             // an isolated classloader
     ),
     SQLITE_DRIVER(
             "org.xerial",
             "sqlite-jdbc",
-            "3.25.2",
-            "pF2mGr7WFWilM/3s4SUJMYCCjt6w1Lb21XLgz0V0ZfY="
+            "3.28.0",
+            "k3hOVtv1RiXgbJks+D9w6cG93Vxq0dPwEwjIex2WG2A="
             // we don't apply relocations to sqlite - it gets loaded via
             // an isolated classloader
     ),
     HIKARI(
             "com{}zaxxer",
             "HikariCP",
-            "3.3.1",
-            "SIaA1yzGHOZNpZNoIt903f5ScJrIB3u8CT2cNkaLcy0=",
+            "3.4.2",
+            "rnp2e/N8l5JSPtPtcitG6M8jYPVG9iUOuYyDNVrWl/k=",
             Relocation.of("hikari", "com{}zaxxer{}hikari")
     ),
     SLF4J_SIMPLE(
             "org.slf4j",
             "slf4j-simple",
-            "1.7.25",
-            "CWbob/+lvlLT2ee4ndZ02YoD7tCkVPuvfBvZSTvZ2HQ="
+            "1.7.30",
+            "i5J5y/9rn4hZTvrjzwIDm2mVAw7sAj7UOSh0jEFnD+4="
     ),
     SLF4J_API(
             "org.slf4j",
             "slf4j-api",
-            "1.7.25",
-            "GMSgCV1cHaa4F1kudnuyPSndL1YK1033X/OWHb3iW3k="
+            "1.7.30",
+            "zboHlk0btAoHYUhcax6ML4/Z6x0ZxTkorA1/lRAQXFc="
     ),
     MONGODB_DRIVER(
             "org.mongodb",
             "mongo-java-driver",
-            "3.10.1",
-            "IGjdjTH4VjqnqGUdVe8u+dKfzKkpCG1NR11TE8ieCdU=",
+            "3.12.2",
+            "eMxHcEtasb/ubFCv99kE5rVZMPGmBei674ZTdjYe58w=",
             Relocation.of("mongodb", "com{}mongodb"),
             Relocation.of("bson", "org{}bson")
     ),
     JEDIS(
             "redis.clients",
             "jedis",
-            "2.10.2",
-            "06PKnEnk08yYpdI2IUAZYxJjp0d6lDp0nGQkWw3CWsU=",
+            "3.2.0",
+            "+S7KUSPPUC9xDj10tANcMLC3EtPxqxv8JJiaDClgQwc=",
             Relocation.of("jedis", "redis{}clients{}jedis"),
-            Relocation.of("jedisutil", "redis{}clients{}util"),
             Relocation.of("commonspool2", "org{}apache{}commons{}pool2")
     ),
     COMMONS_POOL_2(
             "org.apache.commons",
             "commons-pool2",
-            "2.6.1",
-            "4tb0CE+KGA3mbHcAND/orToKqE8ssFYe20F/4f1BqhU=",
+            "2.8.0",
+            "Xvqfu1SlixoSIFpfrFZfaYKr/rD/Rb28MYdI71/To/8=",
             Relocation.of("commonspool2", "org{}apache{}commons{}pool2")
     ),
     CONFIGURATE_CORE(
@@ -317,17 +319,18 @@ public enum Dependency {
         return s.replace("{}", ".");
     }
 
+    /*
     public static void main(String[] args) throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
 
         for (Dependency dependency : values()) {
-            List<byte[]> hashes = new ArrayList<>();
+            List<byte[]> hashes = new java.util.ArrayList<>();
             for (URL url : dependency.getUrls()) {
-                URLConnection connection = url.openConnection();
+                java.net.URLConnection connection = url.openConnection();
                 connection.setRequestProperty("User-Agent", "luckperms");
 
-                try (InputStream in = connection.getInputStream()) {
-                    byte[] bytes = ByteStreams.toByteArray(in);
+                try (java.io.InputStream in = connection.getInputStream()) {
+                    byte[] bytes = com.google.common.io.ByteStreams.toByteArray(in);
                     if (bytes.length == 0) {
                         throw new RuntimeException("Empty stream");
                     }
@@ -338,11 +341,16 @@ public enum Dependency {
 
             for (int i = 0; i < hashes.size(); i++) {
                 byte[] hash = hashes.get(i);
-                if (!Arrays.equals(hash, dependency.getChecksum())) {
+                if (!java.util.Arrays.equals(hash, dependency.getChecksum())) {
                     System.out.println("NO MATCH - REPO " + i + " - " + dependency.name() + ": " + Base64.getEncoder().encodeToString(hash));
                 }
             }
         }
+    }
+    */
+
+    public String getFileName() {
+        return name().toLowerCase().replace('_', '-') + "-" + this.version;
     }
 
     public List<URL> getUrls() {

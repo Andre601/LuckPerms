@@ -25,10 +25,9 @@
 
 package me.lucko.luckperms.common.commands.track;
 
-import me.lucko.luckperms.api.DataMutateResult;
-import me.lucko.luckperms.common.actionlog.ExtendedLogEntry;
+import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.command.CommandResult;
-import me.lucko.luckperms.common.command.abstraction.SubCommand;
+import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.access.CommandPermission;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompletions;
@@ -43,9 +42,11 @@ import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.storage.misc.DataConstraints;
 import me.lucko.luckperms.common.util.Predicates;
 
+import net.luckperms.api.model.data.DataMutateResult;
+
 import java.util.List;
 
-public class TrackRemove extends SubCommand<Track> {
+public class TrackRemove extends ChildCommand<Track> {
     public TrackRemove(LocaleManager locale) {
         super(CommandSpec.TRACK_REMOVE.localize(locale), "remove", CommandPermission.TRACK_REMOVE, Predicates.not(1));
     }
@@ -60,14 +61,14 @@ public class TrackRemove extends SubCommand<Track> {
 
         DataMutateResult result = track.removeGroup(groupName);
 
-        if (result.asBoolean()) {
+        if (result.wasSuccessful()) {
             Message.TRACK_REMOVE_SUCCESS.send(sender, groupName, track.getName());
             if (track.getGroups().size() > 1) {
                 Message.BLANK.send(sender, MessageUtils.listToArrowSep(track.getGroups()));
             }
 
-            ExtendedLogEntry.build().actor(sender).acted(track)
-                    .action("remove", groupName)
+            LoggedAction.build().source(sender).target(track)
+                    .description("remove", groupName)
                     .build().submit(plugin, sender);
 
             StorageAssistant.save(track, sender, plugin);

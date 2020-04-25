@@ -25,15 +25,16 @@
 
 package me.lucko.luckperms.common.storage.implementation.file;
 
-import me.lucko.luckperms.api.HeldPermission;
 import me.lucko.luckperms.common.bulkupdate.BulkUpdate;
 import me.lucko.luckperms.common.bulkupdate.comparison.Constraint;
-import me.lucko.luckperms.common.model.manager.group.GroupManager;
-import me.lucko.luckperms.common.model.manager.track.TrackManager;
-import me.lucko.luckperms.common.node.model.NodeDataContainer;
-import me.lucko.luckperms.common.node.model.NodeHeldPermission;
+import me.lucko.luckperms.common.node.model.HeldNodeImpl;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.storage.implementation.file.loader.ConfigurateLoader;
+import me.lucko.luckperms.common.storage.implementation.file.watcher.FileWatcher;
+import me.lucko.luckperms.common.util.Iterators;
+
+import net.luckperms.api.node.HeldNode;
+import net.luckperms.api.node.Node;
 
 import ninja.leaping.configurate.ConfigurationNode;
 import ninja.leaping.configurate.loader.ConfigurationLoader;
@@ -100,15 +101,13 @@ public class CombinedConfigurateStorage extends AbstractConfigurateStorage {
             this.lock.lock();
             try {
                 if (this.node == null || reload) {
-                    recordChange();
-                    this.node = this.loader.load();
+                    reload();
                 }
 
                 action.accept(this.node);
 
                 if (save) {
-                    recordChange();
-                    this.loader.save(this.node);
+                    save();
                 }
             } finally {
                 this.lock.unlock();
@@ -144,9 +143,10 @@ public class CombinedConfigurateStorage extends AbstractConfigurateStorage {
     private FileWatcher.WatchedLocation watcher = null;
 
     /**
-     * Creates a new configurate dao
+     * Creates a new configurate storage implementation
+     *
      * @param plugin the plugin instance
-     * @param implementationName the name of this dao
+     * @param implementationName the name of this implementation
      * @param fileExtension the file extension used by this instance, including a "." at the start
      * @param dataFolderName the name of the folder used to store data
      */
@@ -158,8 +158,8 @@ public class CombinedConfigurateStorage extends AbstractConfigurateStorage {
     @Override
     protected ConfigurationNode readFile(StorageLocation location, String name) throws IOException {
         ConfigurationNode root = getStorageLoader(location).getNode();
-        ConfigurationNode ret = root.getNode(name);
-        return ret.isVirtual() ? null : ret;
+        ConfigurationNode node = root.getNode(name);
+        return node.isVirtual() ? null : node;
     }
 
     @Override
@@ -262,20 +262,20 @@ public class CombinedConfigurateStorage extends AbstractConfigurateStorage {
     }
 
     @Override
-    public List<HeldPermission<UUID>> getUsersWithPermission(Constraint constraint) throws Exception {
-        List<HeldPermission<UUID>> held = new ArrayList<>();
+    public List<HeldNode<UUID>> getUsersWithPermission(Constraint constraint) throws Exception {
+        List<HeldNode<UUID>> held = new ArrayList<>();
         this.usersLoader.apply(false, true, root -> {
             for (Map.Entry<Object, ? extends ConfigurationNode> entry : root.getChildrenMap().entrySet()) {
                 try {
                     UUID holder = UUID.fromString(entry.getKey().toString());
                     ConfigurationNode object = entry.getValue();
 
-                    Set<NodeDataContainer> nodes = readNodes(object);
-                    for (NodeDataContainer e : nodes) {
-                        if (!constraint.eval(e.getPermission())) {
+                    Set<Node> nodes = readNodes(object);
+                    for (Node e : nodes) {
+                        if (!constraint.eval(e.getKey())) {
                             continue;
                         }
-                        held.add(NodeHeldPermission.of(holder, e));
+                        held.add(HeldNodeImpl.of(holder, e));
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -288,48 +288,34 @@ public class CombinedConfigurateStorage extends AbstractConfigurateStorage {
     @Override
     public void loadAllGroups() throws IOException {
         List<String> groups = new ArrayList<>();
-
         this.groupsLoader.apply(false, true, root -> {
             groups.addAll(root.getChildrenMap().keySet().stream()
                     .map(Object::toString)
                     .collect(Collectors.toList()));
         });
 
-        boolean success = true;
-        for (String g : groups) {
-            try {
-                loadGroup(g);
-            } catch (Exception e) {
-                e.printStackTrace();
-                success = false;
-            }
-        }
-
-        if (!success) {
+        if (!Iterators.tryIterate(groups, this::loadGroup)) {
             throw new RuntimeException("Exception occurred whilst loading a group");
         }
 
-        GroupManager<?> gm = this.plugin.getGroupManager();
-        gm.getAll().values().stream()
-                .filter(g -> !groups.contains(g.getName()))
-                .forEach(gm::unload);
+        this.plugin.getGroupManager().retainAll(groups);
     }
 
     @Override
-    public List<HeldPermission<String>> getGroupsWithPermission(Constraint constraint) throws Exception {
-        List<HeldPermission<String>> held = new ArrayList<>();
+    public List<HeldNode<String>> getGroupsWithPermission(Constraint constraint) throws Exception {
+        List<HeldNode<String>> held = new ArrayList<>();
         this.groupsLoader.apply(false, true, root -> {
             for (Map.Entry<Object, ? extends ConfigurationNode> entry : root.getChildrenMap().entrySet()) {
                 try {
                     String holder = entry.getKey().toString();
                     ConfigurationNode object = entry.getValue();
 
-                    Set<NodeDataContainer> nodes = readNodes(object);
-                    for (NodeDataContainer e : nodes) {
-                        if (!constraint.eval(e.getPermission())) {
+                    Set<Node> nodes = readNodes(object);
+                    for (Node e : nodes) {
+                        if (!constraint.eval(e.getKey())) {
                             continue;
                         }
-                        held.add(NodeHeldPermission.of(holder, e));
+                        held.add(HeldNodeImpl.of(holder, e));
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -342,31 +328,17 @@ public class CombinedConfigurateStorage extends AbstractConfigurateStorage {
     @Override
     public void loadAllTracks() throws IOException {
         List<String> tracks = new ArrayList<>();
-
         this.tracksLoader.apply(false, true, root -> {
             tracks.addAll(root.getChildrenMap().keySet().stream()
                     .map(Object::toString)
                     .collect(Collectors.toList()));
         });
 
-        boolean success = true;
-        for (String t : tracks) {
-            try {
-                loadTrack(t);
-            } catch (Exception e) {
-                e.printStackTrace();
-                success = false;
-            }
-        }
-
-        if (!success) {
+        if (!Iterators.tryIterate(tracks, this::loadTrack)) {
             throw new RuntimeException("Exception occurred whilst loading a track");
         }
 
-        TrackManager<?> tm = this.plugin.getTrackManager();
-        tm.getAll().values().stream()
-                .filter(t -> !tracks.contains(t.getName()))
-                .forEach(tm::unload);
+        this.plugin.getTrackManager().retainAll(tracks);
     }
 
 }

@@ -60,15 +60,21 @@ public class BungeeConnectionListener extends AbstractConnectionListener impleme
            This means that a player will have the same UUID across the network, even if parts of the network are running in
            Offline mode. */
 
-        /* registers the plugins intent to modify this events state going forward.
-           this will prevent the event from completing until we're finished handling. */
-        e.registerIntent(this.plugin.getBootstrap());
-
         final PendingConnection c = e.getConnection();
 
         if (this.plugin.getConfiguration().get(ConfigKeys.DEBUG_LOGINS)) {
             this.plugin.getLogger().info("Processing pre-login for " + c.getUniqueId() + " - " + c.getName());
         }
+
+        if (e.isCancelled()) {
+            // another plugin has disallowed the login.
+            this.plugin.getLogger().info("Another plugin has cancelled the connection for " + c.getUniqueId() + " - " + c.getName() + ". No permissions data will be loaded.");
+            return;
+        }
+
+        /* registers the plugins intent to modify this events state going forward.
+           this will prevent the event from completing until we're finished handling. */
+        e.registerIntent(this.plugin.getBootstrap());
 
         this.plugin.getBootstrap().getScheduler().executeAsync(() -> {
             /* Actually process the login for the connection.
@@ -83,7 +89,7 @@ public class BungeeConnectionListener extends AbstractConnectionListener impleme
             try {
                 User user = loadUser(c.getUniqueId(), c.getName());
                 recordConnection(c.getUniqueId());
-                this.plugin.getEventFactory().handlePlayerLoginProcess(c.getUniqueId(), c.getName(), user);
+                this.plugin.getEventDispatcher().dispatchPlayerLoginProcess(c.getUniqueId(), c.getName(), user);
             } catch (Exception ex) {
                 this.plugin.getLogger().severe("Exception occurred whilst loading data for " + c.getUniqueId() + " - " + c.getName());
                 ex.printStackTrace();
@@ -94,7 +100,7 @@ public class BungeeConnectionListener extends AbstractConnectionListener impleme
                     e.setCancelReason(TextComponent.fromLegacyText(Message.LOADING_DATABASE_ERROR.asString(this.plugin.getLocaleManager())));
                     e.setCancelled(true);
                 }
-                this.plugin.getEventFactory().handlePlayerLoginProcess(c.getUniqueId(), c.getName(), null);
+                this.plugin.getEventDispatcher().dispatchPlayerLoginProcess(c.getUniqueId(), c.getName(), null);
             }
 
             // finally, complete our intent to modify state, so the proxy can continue handling the connection.

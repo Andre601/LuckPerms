@@ -25,10 +25,9 @@
 
 package me.lucko.luckperms.common.commands.track;
 
-import me.lucko.luckperms.api.DataMutateResult;
-import me.lucko.luckperms.common.actionlog.ExtendedLogEntry;
+import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.command.CommandResult;
-import me.lucko.luckperms.common.command.abstraction.SubCommand;
+import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.access.CommandPermission;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompletions;
@@ -44,9 +43,11 @@ import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.storage.misc.DataConstraints;
 import me.lucko.luckperms.common.util.Predicates;
 
+import net.luckperms.api.model.data.DataMutateResult;
+
 import java.util.List;
 
-public class TrackInsert extends SubCommand<Track> {
+public class TrackInsert extends ChildCommand<Track> {
     public TrackInsert(LocaleManager locale) {
         super(CommandSpec.TRACK_INSERT.localize(locale), "insert", CommandPermission.TRACK_INSERT, Predicates.not(2));
     }
@@ -75,14 +76,14 @@ public class TrackInsert extends SubCommand<Track> {
         try {
             DataMutateResult result = track.insertGroup(group, pos - 1);
 
-            if (result.asBoolean()) {
+            if (result.wasSuccessful()) {
                 Message.TRACK_INSERT_SUCCESS.send(sender, group.getName(), track.getName(), pos);
                 if (track.getGroups().size() > 1) {
                     Message.BLANK.send(sender, MessageUtils.listToArrowSep(track.getGroups(), group.getName()));
                 }
 
-                ExtendedLogEntry.build().actor(sender).acted(track)
-                        .action("insert", group.getName(), pos)
+                LoggedAction.build().source(sender).target(track)
+                        .description("insert", group.getName(), pos)
                         .build().submit(plugin, sender);
 
                 StorageAssistant.save(track, sender, plugin);

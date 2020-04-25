@@ -30,9 +30,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 
-import me.lucko.luckperms.api.Tristate;
-import me.lucko.luckperms.api.context.ImmutableContextSet;
 import me.lucko.luckperms.common.cache.LoadingMap;
+import me.lucko.luckperms.common.context.contextset.ImmutableContextSetImpl;
 import me.lucko.luckperms.common.util.ImmutableCollectors;
 import me.lucko.luckperms.common.util.Predicates;
 import me.lucko.luckperms.sponge.service.LuckPermsService;
@@ -40,6 +39,9 @@ import me.lucko.luckperms.sponge.service.ProxyFactory;
 import me.lucko.luckperms.sponge.service.model.LPSubject;
 import me.lucko.luckperms.sponge.service.model.LPSubjectCollection;
 import me.lucko.luckperms.sponge.service.model.LPSubjectReference;
+
+import net.luckperms.api.context.ImmutableContextSet;
+import net.luckperms.api.util.Tristate;
 
 import org.spongepowered.api.service.permission.SubjectCollection;
 
@@ -141,11 +143,11 @@ public class PersistedCollection implements LPSubjectCollection {
 
     @Override
     public CompletableFuture<ImmutableCollection<LPSubject>> loadSubjects(Set<String> identifiers) {
-        ImmutableSet.Builder<LPSubject> ret = ImmutableSet.builder();
+        ImmutableSet.Builder<LPSubject> subjects = ImmutableSet.builder();
         for (String id : identifiers) {
-            ret.add(Objects.requireNonNull(this.subjects.get(id.toLowerCase())));
+            subjects.add(Objects.requireNonNull(this.subjects.get(id.toLowerCase())));
         }
-        return CompletableFuture.completedFuture(ret.build());
+        return CompletableFuture.completedFuture(subjects.build());
     }
 
     @Override
@@ -174,7 +176,7 @@ public class PersistedCollection implements LPSubjectCollection {
     public ImmutableMap<LPSubject, Boolean> getLoadedWithPermission(String permission) {
         ImmutableMap.Builder<LPSubject, Boolean> m = ImmutableMap.builder();
         for (LPSubject subject : this.subjects.values()) {
-            Tristate ts = subject.getPermissionValue(ImmutableContextSet.empty(), permission);
+            Tristate ts = subject.getPermissionValue(ImmutableContextSetImpl.EMPTY, permission);
             if (ts != Tristate.UNDEFINED) {
                 m.put(subject, ts.asBoolean());
             }

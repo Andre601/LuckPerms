@@ -25,9 +25,8 @@
 
 package me.lucko.luckperms.sponge.commands;
 
-import me.lucko.luckperms.api.context.ImmutableContextSet;
 import me.lucko.luckperms.common.command.CommandResult;
-import me.lucko.luckperms.common.command.abstraction.SubCommand;
+import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.access.CommandPermission;
 import me.lucko.luckperms.common.command.utils.ArgumentParser;
 import me.lucko.luckperms.common.locale.LocaleManager;
@@ -38,9 +37,11 @@ import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.util.Predicates;
 import me.lucko.luckperms.sponge.service.model.LPSubjectData;
 
+import net.luckperms.api.context.ImmutableContextSet;
+
 import java.util.List;
 
-public class ParentClear extends SubCommand<LPSubjectData> {
+public class ParentClear extends ChildCommand<LPSubjectData> {
     public ParentClear(LocaleManager locale) {
         super(CommandSpec.SPONGE_PARENT_CLEAR.localize(locale), "clear", CommandPermission.SPONGE_PARENT_CLEAR, Predicates.alwaysFalse());
     }

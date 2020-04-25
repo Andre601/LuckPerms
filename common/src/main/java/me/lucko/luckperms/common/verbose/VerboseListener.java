@@ -27,37 +27,48 @@ package me.lucko.luckperms.common.verbose;
 
 import com.google.gson.JsonObject;
 
-import me.lucko.luckperms.api.Tristate;
 import me.lucko.luckperms.common.calculator.result.TristateResult;
-import me.lucko.luckperms.common.command.CommandManager;
 import me.lucko.luckperms.common.command.utils.MessageUtils;
 import me.lucko.luckperms.common.locale.message.Message;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.util.DurationFormatter;
 import me.lucko.luckperms.common.util.StackTracePrinter;
 import me.lucko.luckperms.common.util.TextUtils;
+import me.lucko.luckperms.common.util.gson.GsonProvider;
 import me.lucko.luckperms.common.util.gson.JArray;
 import me.lucko.luckperms.common.util.gson.JObject;
 import me.lucko.luckperms.common.verbose.event.MetaCheckEvent;
 import me.lucko.luckperms.common.verbose.event.PermissionCheckEvent;
 import me.lucko.luckperms.common.verbose.event.VerboseEvent;
-import me.lucko.luckperms.common.web.Bytebin;
+import me.lucko.luckperms.common.web.AbstractHttpClient;
+import me.lucko.luckperms.common.web.BytebinClient;
 
 import net.kyori.text.TextComponent;
 import net.kyori.text.event.HoverEvent;
+import net.luckperms.api.query.QueryMode;
+import net.luckperms.api.util.Tristate;
 
-import java.text.SimpleDateFormat;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
+import java.util.zip.GZIPOutputStream;
 
 /**
  * Accepts and processes {@link VerboseEvent}, passed from the {@link VerboseHandler}.
  */
 public class VerboseListener {
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z");
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss z")
+            .withZone(ZoneId.systemDefault());
 
     // how much data should we store before stopping.
     private static final int DATA_TRUNCATION = 10000;
@@ -89,7 +100,7 @@ public class VerboseListener {
             .build();
 
     // the time when the listener was first registered
-    private final long startTime = System.currentTimeMillis();
+    private final Instant startTime = Instant.now();
     // the sender to notify each time the listener processes a check which passes the filter
     private final Sender notifiedSender;
     // the filter
@@ -206,7 +217,10 @@ public class VerboseListener {
             hover.add("&bOrigin: &2" + metaEvent.getOrigin().name());
         }
 
-        hover.add("&bContext: &r" + MessageUtils.contextSetToString(this.notifiedSender.getPlugin().getLocaleManager(), event.getCheckContext()));
+        if (event.getCheckQueryOptions().mode() == QueryMode.CONTEXTUAL) {
+            hover.add("&bContext: &r" + MessageUtils.contextSetToString(this.notifiedSender.getPlugin().getLocaleManager(), event.getCheckQueryOptions().context()));
+        }
+        hover.add("&bThread: &r" + event.getCheckThread());
         hover.add("&bTrace: &r");
 
         Consumer<StackTraceElement> printer = StackTracePrinter.elementToString(str -> hover.add("&7" + str));
@@ -221,7 +235,7 @@ public class VerboseListener {
         }
 
         // send the message
-        HoverEvent hoverEvent = HoverEvent.showText(TextUtils.fromLegacy(TextUtils.joinNewline(hover.stream()), CommandManager.AMPERSAND_CHAR));
+        HoverEvent hoverEvent = HoverEvent.showText(TextUtils.fromLegacy(TextUtils.joinNewline(hover.stream()), TextUtils.AMPERSAND_CHAR));
         TextComponent text = textComponent.toBuilder().applyDeep(comp -> comp.hoverEvent(hoverEvent)).build();
         this.notifiedSender.sendMessage(text);
     }
@@ -241,21 +255,11 @@ public class VerboseListener {
      * @param bytebin the bytebin instance to upload with
      * @return the url
      */
-    public String uploadPasteData(Bytebin bytebin) {
+    public String uploadPasteData(BytebinClient bytebin) {
         // retrieve variables
-        long now = System.currentTimeMillis();
-        String startDate = DATE_FORMAT.format(new Date(this.startTime));
-        String endDate = DATE_FORMAT.format(new Date(now));
-        long secondsTaken = (now - this.startTime) / 1000L;
-        String duration = DurationFormatter.CONCISE.format(secondsTaken);
-
-        String filter;
-        if (this.filter.isBlank()){
-            filter = "any";
-        } else {
-            filter = this.filter.toString();
-        }
-
+        String startDate = DATE_FORMAT.format(this.startTime);
+        String endDate = DATE_FORMAT.format(Instant.now());
+        String duration = DurationFormatter.CONCISE.format(Duration.between(this.startTime, Instant.now()));
         boolean truncated = this.matchedCounter.get() > this.results.size();
 
         JObject metadata = new JObject()
@@ -268,9 +272,9 @@ public class VerboseListener {
                 )
                 .add("uploader", new JObject()
                         .add("name", this.notifiedSender.getNameWithLocation())
-                        .add("uuid", this.notifiedSender.getUuid().toString())
+                        .add("uuid", this.notifiedSender.getUniqueId().toString())
                 )
-                .add("filter", filter)
+                .add("filter", this.filter.toString())
                 .add("truncated", truncated);
 
         JArray data = new JArray();
@@ -284,7 +288,19 @@ public class VerboseListener {
                 .add("data", data)
                 .toJson();
 
-        return bytebin.postJson(payload, true).id();
+        ByteArrayOutputStream bytesOut = new ByteArrayOutputStream();
+        try (Writer writer = new OutputStreamWriter(new GZIPOutputStream(bytesOut), StandardCharsets.UTF_8)) {
+            GsonProvider.prettyPrinting().toJson(payload, writer);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        try {
+            return bytebin.postContent(bytesOut.toByteArray(), AbstractHttpClient.JSON_TYPE, false).key();
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     private static String getTristateColor(Tristate tristate) {

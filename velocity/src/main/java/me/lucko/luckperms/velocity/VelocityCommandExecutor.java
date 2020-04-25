@@ -25,44 +25,81 @@
 
 package me.lucko.luckperms.velocity;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Splitter;
 import com.velocitypowered.api.command.Command;
 import com.velocitypowered.api.command.CommandSource;
+import com.velocitypowered.api.proxy.ConsoleCommandSource;
+import com.velocitypowered.api.proxy.ProxyServer;
 
 import me.lucko.luckperms.common.command.CommandManager;
+import me.lucko.luckperms.common.command.utils.ArgumentTokenizer;
 import me.lucko.luckperms.common.sender.Sender;
 
 import org.checkerframework.checker.nullness.qual.NonNull;
 
+import java.util.Arrays;
 import java.util.List;
 
-public class VelocityCommandExecutor implements Command {
-    private static final Splitter TAB_COMPLETE_ARGUMENT_SPLITTER = Splitter.on(CommandManager.COMMAND_SEPARATOR_PATTERN);
-    private static final Splitter ARGUMENT_SPLITTER = Splitter.on(CommandManager.COMMAND_SEPARATOR_PATTERN).omitEmptyStrings();
-    private static final Joiner ARGUMENT_JOINER = Joiner.on(' ');
+public class VelocityCommandExecutor extends CommandManager implements Command {
+    /** The command aliases */
+    private static final String[] ALIASES = {"luckpermsvelocity", "lpv", "vperm", "vperms", "vpermission", "vpermissions"};
+
+    /** The command aliases, prefixed with '/' */
+    private static final String[] SLASH_ALIASES = Arrays.stream(ALIASES).map(s -> '/' + s).toArray(String[]::new);
 
     private final LPVelocityPlugin plugin;
-    private final CommandManager manager;
 
-    public VelocityCommandExecutor(LPVelocityPlugin plugin, CommandManager manager) {
+    public VelocityCommandExecutor(LPVelocityPlugin plugin) {
+        super(plugin);
         this.plugin = plugin;
-        this.manager = manager;
+    }
+
+    public void register() {
+        ProxyServer proxy = this.plugin.getBootstrap().getProxy();
+        proxy.getCommandManager().register(this, ALIASES);
+
+        // register slash aliases so the console can run '/lpv' in the same way as 'lpv'.
+        proxy.getCommandManager().register(new ForwardingCommand(this) {
+            @Override
+            public boolean hasPermission(CommandSource source, @NonNull String[] args) {
+                return source instanceof ConsoleCommandSource;
+            }
+        }, SLASH_ALIASES);
     }
 
     @Override
     public void execute(@NonNull CommandSource source, @NonNull String[] args) {
-        Sender lpSender = this.plugin.getSenderFactory().wrap(source);
-        List<String> arguments = CommandManager.stripQuotes(ARGUMENT_SPLITTER.splitToList(ARGUMENT_JOINER.join(args)));
-
-        this.manager.onCommand(lpSender, "lpv", arguments);
+        Sender wrapped = this.plugin.getSenderFactory().wrap(source);
+        List<String> arguments = ArgumentTokenizer.EXECUTE.tokenizeInput(args);
+        executeCommand(wrapped, "lpv", arguments);
     }
 
     @Override
     public List<String> suggest(@NonNull CommandSource source, @NonNull String[] args) {
-        Sender lpSender = this.plugin.getSenderFactory().wrap(source);
-        List<String> arguments = CommandManager.stripQuotes(TAB_COMPLETE_ARGUMENT_SPLITTER.splitToList(ARGUMENT_JOINER.join(args)));
+        Sender wrapped = this.plugin.getSenderFactory().wrap(source);
+        List<String> arguments = ArgumentTokenizer.TAB_COMPLETE.tokenizeInput(args);
+        return tabCompleteCommand(wrapped, arguments);
+    }
 
-        return this.manager.onTabComplete(lpSender, arguments);
+    private static class ForwardingCommand implements Command {
+        private final Command delegate;
+
+        private ForwardingCommand(Command delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public void execute(CommandSource source, @NonNull String[] args) {
+            this.delegate.execute(source, args);
+        }
+
+        @Override
+        public List<String> suggest(CommandSource source, @NonNull String[] currentArgs) {
+            return this.delegate.suggest(source, currentArgs);
+        }
+
+        @Override
+        public boolean hasPermission(CommandSource source, @NonNull String[] args) {
+            return this.delegate.hasPermission(source, args);
+        }
     }
 }

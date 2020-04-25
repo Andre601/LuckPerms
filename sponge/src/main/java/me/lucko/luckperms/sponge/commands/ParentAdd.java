@@ -25,9 +25,8 @@
 
 package me.lucko.luckperms.sponge.commands;
 
-import me.lucko.luckperms.api.context.ImmutableContextSet;
 import me.lucko.luckperms.common.command.CommandResult;
-import me.lucko.luckperms.common.command.abstraction.SubCommand;
+import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.access.CommandPermission;
 import me.lucko.luckperms.common.command.utils.ArgumentParser;
 import me.lucko.luckperms.common.locale.LocaleManager;
@@ -41,11 +40,13 @@ import me.lucko.luckperms.sponge.service.model.LPSubject;
 import me.lucko.luckperms.sponge.service.model.LPSubjectCollection;
 import me.lucko.luckperms.sponge.service.model.LPSubjectData;
 
+import net.luckperms.api.context.ImmutableContextSet;
+
 import org.spongepowered.api.Sponge;
 
 import java.util.List;
 
-public class ParentAdd extends SubCommand<LPSubjectData> {
+public class ParentAdd extends ChildCommand<LPSubjectData> {
     public ParentAdd(LocaleManager locale) {
         super(CommandSpec.SPONGE_PARENT_ADD.localize(locale), "add", CommandPermission.SPONGE_PARENT_ADD, Predicates.inRange(0, 1));
     }

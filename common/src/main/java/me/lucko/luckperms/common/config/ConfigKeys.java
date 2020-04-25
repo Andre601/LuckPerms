@@ -25,36 +25,39 @@
 
 package me.lucko.luckperms.common.config;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 
-import me.lucko.luckperms.api.Contexts;
-import me.lucko.luckperms.api.TemporaryMergeBehaviour;
-import me.lucko.luckperms.api.context.ContextSet;
-import me.lucko.luckperms.api.metastacking.DuplicateRemovalFunction;
-import me.lucko.luckperms.api.metastacking.MetaStackDefinition;
+import me.lucko.luckperms.common.cacheddata.type.SimpleMetaValueSelector;
 import me.lucko.luckperms.common.command.utils.ArgumentParser;
-import me.lucko.luckperms.common.defaultassignments.AssignmentRule;
 import me.lucko.luckperms.common.graph.TraversalAlgorithm;
 import me.lucko.luckperms.common.metastacking.SimpleMetaStackDefinition;
 import me.lucko.luckperms.common.metastacking.StandardStackElements;
+import me.lucko.luckperms.common.model.PrimaryGroupHolder;
 import me.lucko.luckperms.common.model.User;
-import me.lucko.luckperms.common.primarygroup.AllParentsByWeightHolder;
-import me.lucko.luckperms.common.primarygroup.ParentsByWeightHolder;
-import me.lucko.luckperms.common.primarygroup.PrimaryGroupHolder;
-import me.lucko.luckperms.common.primarygroup.StoredHolder;
+import me.lucko.luckperms.common.query.QueryOptionsBuilderImpl;
 import me.lucko.luckperms.common.storage.StorageType;
 import me.lucko.luckperms.common.storage.implementation.split.SplitStorageType;
 import me.lucko.luckperms.common.storage.misc.StorageCredentials;
 import me.lucko.luckperms.common.util.ImmutableCollectors;
 
-import java.lang.reflect.Field;
+import net.luckperms.api.metastacking.DuplicateRemovalFunction;
+import net.luckperms.api.metastacking.MetaStackDefinition;
+import net.luckperms.api.model.data.TemporaryNodeMergeStrategy;
+import net.luckperms.api.query.Flag;
+import net.luckperms.api.query.QueryMode;
+import net.luckperms.api.query.QueryOptions;
+import net.luckperms.api.query.meta.MetaValueSelector;
+
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
-import java.util.LinkedHashMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 
 import static me.lucko.luckperms.common.config.ConfigKeyTypes.booleanKey;
@@ -92,16 +95,22 @@ public final class ConfigKeys {
     /**
      * The default global contexts instance
      */
-    public static final ConfigKey<Contexts> GLOBAL_CONTEXTS = customKey(c -> {
-        return Contexts.of(
-                ContextSet.empty(),
-                c.getBoolean("include-global", true),
-                c.getBoolean("include-global-world", true),
-                true,
-                c.getBoolean("apply-global-groups", true),
-                c.getBoolean("apply-global-world-groups", true),
-                false
-        );
+    public static final ConfigKey<QueryOptions> GLOBAL_QUERY_OPTIONS = customKey(c -> {
+        Set<Flag> flags = EnumSet.of(Flag.RESOLVE_INHERITANCE);
+        if (c.getBoolean("include-global", true)) {
+            flags.add(Flag.INCLUDE_NODES_WITHOUT_SERVER_CONTEXT);
+        }
+        if (c.getBoolean("include-global-world", true)) {
+            flags.add(Flag.INCLUDE_NODES_WITHOUT_WORLD_CONTEXT);
+        }
+        if (c.getBoolean("apply-global-groups", true)) {
+            flags.add(Flag.APPLY_INHERITANCE_NODES_WITHOUT_SERVER_CONTEXT);
+        }
+        if (c.getBoolean("apply-global-world-groups", true)) {
+            flags.add(Flag.APPLY_INHERITANCE_NODES_WITHOUT_WORLD_CONTEXT);
+        }
+
+        return new QueryOptionsBuilderImpl(QueryMode.CONTEXTUAL).flags(flags).build();
     });
 
     /**
@@ -125,9 +134,14 @@ public final class ConfigKeys {
     public static final ConfigKey<Boolean> CANCEL_FAILED_LOGINS = booleanKey("cancel-failed-logins", false);
 
     /**
+     * If LuckPerms should attempt to resolve Vanilla command target selectors for LP commands.
+     */
+    public static final ConfigKey<Boolean> RESOLVE_COMMAND_SELECTORS = booleanKey("resolve-command-selectors", false);
+
+    /**
      * Controls how temporary add commands should behave
      */
-    public static final ConfigKey<TemporaryMergeBehaviour> TEMPORARY_ADD_BEHAVIOUR = customKey(c -> {
+    public static final ConfigKey<TemporaryNodeMergeStrategy> TEMPORARY_ADD_BEHAVIOUR = customKey(c -> {
         String option = c.getString("temporary-add-behaviour", "deny").toLowerCase();
         if (!option.equals("deny") && !option.equals("replace") && !option.equals("accumulate")) {
             option = "deny";
@@ -155,11 +169,11 @@ public final class ConfigKeys {
         String option = PRIMARY_GROUP_CALCULATION_METHOD.get(c);
         switch (option) {
             case "stored":
-                return (Function<User, PrimaryGroupHolder>) StoredHolder::new;
+                return (Function<User, PrimaryGroupHolder>) PrimaryGroupHolder.Stored::new;
             case "parents-by-weight":
-                return (Function<User, PrimaryGroupHolder>) ParentsByWeightHolder::new;
+                return (Function<User, PrimaryGroupHolder>) PrimaryGroupHolder.ParentsByWeight::new;
             default:
-                return (Function<User, PrimaryGroupHolder>) AllParentsByWeightHolder::new;
+                return (Function<User, PrimaryGroupHolder>) PrimaryGroupHolder.AllParentsByWeight::new;
         }
     }));
 
@@ -260,6 +274,22 @@ public final class ConfigKeys {
      * has resolved the inheritance tree
      */
     public static final ConfigKey<Boolean> POST_TRAVERSAL_INHERITANCE_SORT = booleanKey("post-traversal-inheritance-sort", false);
+
+    /**
+     * The meta value selector
+     */
+    public static final ConfigKey<MetaValueSelector> META_VALUE_SELECTOR = customKey(c -> {
+        SimpleMetaValueSelector.Strategy defaultStrategy = SimpleMetaValueSelector.Strategy.parse(c.getString("meta-value-selection-default", "inheritance"));
+        Map<String, SimpleMetaValueSelector.Strategy> strategies = c.getStringMap("meta-value-selection", ImmutableMap.of()).entrySet().stream()
+                .map(e -> {
+                    SimpleMetaValueSelector.Strategy parse = SimpleMetaValueSelector.Strategy.parse(e.getValue());
+                    return parse == null ? null : Maps.immutableEntry(e.getKey(), parse);
+                })
+                .filter(Objects::nonNull)
+                .collect(ImmutableCollectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        return new SimpleMetaValueSelector(strategies, defaultStrategy);
+    });
 
     /**
      * The configured group weightings
@@ -394,11 +424,6 @@ public final class ConfigKeys {
     public static final ConfigKey<Boolean> VAULT_IGNORE_WORLD = booleanKey("vault-ignore-world", false);
 
     /**
-     * If Vault debug mode is enabled
-     */
-    public static final ConfigKey<Boolean> VAULT_DEBUG = booleanKey("vault-debug", false);
-
-    /**
      * The world rewrites map
      */
     public static final ConfigKey<Map<String, String>> WORLD_REWRITES = customKey(c -> {
@@ -413,21 +438,6 @@ public final class ConfigKeys {
      * The group name rewrites map
      */
     public static final ConfigKey<Map<String, String>> GROUP_NAME_REWRITES = mapKey("group-name-rewrite");
-
-    /**
-     * The default assignments being applied by the plugin
-     */
-    public static final ConfigKey<List<AssignmentRule>> DEFAULT_ASSIGNMENTS = customKey(c -> {
-        return c.getKeys("default-assignments", ImmutableList.of()).stream().map(name -> {
-            String hasTrue = c.getString("default-assignments." + name + ".if.has-true", null);
-            String hasFalse = c.getString("default-assignments." + name + ".if.has-false", null);
-            String lacks = c.getString("default-assignments." + name + ".if.lacks", null);
-            List<String> give = ImmutableList.copyOf(c.getStringList("default-assignments." + name + ".give", ImmutableList.of()));
-            List<String> take = ImmutableList.copyOf(c.getStringList("default-assignments." + name + ".take", ImmutableList.of()));
-            String pg = c.getString("default-assignments." + name + ".set-primary-group", null);
-            return new AssignmentRule(hasTrue, hasFalse, lacks, give, take, pg);
-        }).collect(ImmutableCollectors.toList());
-    });
 
     /**
      * The database settings, username, password, etc for use by any database
@@ -451,17 +461,23 @@ public final class ConfigKeys {
     /**
      * The prefix for any SQL tables
      */
-    public static final ConfigKey<String> SQL_TABLE_PREFIX = enduringKey(stringKey("data.table_prefix", "luckperms_"));
+    public static final ConfigKey<String> SQL_TABLE_PREFIX = enduringKey(customKey(c -> {
+        return c.getString("data.table-prefix", c.getString("data.table_prefix", "luckperms_"));
+    }));
 
     /**
      * The prefix for any MongoDB collections
      */
-    public static final ConfigKey<String> MONGODB_COLLECTION_PREFIX = enduringKey(stringKey("data.mongodb_collection_prefix", ""));
+    public static final ConfigKey<String> MONGODB_COLLECTION_PREFIX = enduringKey(customKey(c -> {
+        return c.getString("data.mongodb-collection-prefix", c.getString("data.mongodb_collection_prefix", ""));
+    }));
 
     /**
      * MongoDB ClientConnectionURI to override default connection options
      */
-    public static final ConfigKey<String> MONGODB_CONNECTION_URI = enduringKey(stringKey("data.mongodb_connection_URI", ""));
+    public static final ConfigKey<String> MONGODB_CONNECTION_URI = enduringKey(customKey(c -> {
+        return c.getString("data.mongodb-connection-uri", c.getString("data.mongodb_connection_URI", ""));
+    }));
 
     /**
      * The name of the storage method being used
@@ -496,7 +512,7 @@ public final class ConfigKeys {
     /**
      * The name of the messaging service in use, or "none" if not enabled
      */
-    public static final ConfigKey<String> MESSAGING_SERVICE = enduringKey(lowercaseStringKey("messaging-service", "none"));
+    public static final ConfigKey<String> MESSAGING_SERVICE = enduringKey(lowercaseStringKey("messaging-service", "auto"));
 
     /**
      * If updates should be automatically pushed by the messaging service
@@ -536,72 +552,47 @@ public final class ConfigKeys {
     /**
      * The URL of the web editor
      */
-    public static final ConfigKey<String> WEB_EDITOR_URL_PATTERN = stringKey("web-editor-url", "https://luckperms.github.io/editor/");
+    public static final ConfigKey<String> WEB_EDITOR_URL_PATTERN = stringKey("web-editor-url", "https://editor.luckperms.net/");
 
     /**
      * The URL of the verbose viewer
      */
-    public static final ConfigKey<String> VERBOSE_VIEWER_URL_PATTERN = stringKey("verbose-viewer-url", "https://luckperms.github.io/verbose/");
+    public static final ConfigKey<String> VERBOSE_VIEWER_URL_PATTERN = stringKey("verbose-viewer-url", "https://luckperms.net/verbose/#");
 
     /**
      * The URL of the tree viewer
      */
-    public static final ConfigKey<String> TREE_VIEWER_URL_PATTERN = stringKey("tree-viewer-url", "https://luckperms.github.io/treeview/");
+    public static final ConfigKey<String> TREE_VIEWER_URL_PATTERN = stringKey("tree-viewer-url", "https://luckperms.net/treeview/#");
 
-    private static final Map<String, ConfigKey<?>> KEYS;
-    private static final int SIZE;
+    private static final List<ConfigKeyTypes.BaseConfigKey<?>> KEYS;
 
     static {
-        Map<String, ConfigKey<?>> keys = new LinkedHashMap<>();
-        Field[] values = ConfigKeys.class.getFields();
-        int i = 0;
+        // get a list of all keys
+        KEYS = Arrays.stream(ConfigKeys.class.getFields())
+                .filter(f -> Modifier.isStatic(f.getModifiers()))
+                .filter(f -> ConfigKey.class.equals(f.getType()))
+                .map(f -> {
+                    try {
+                        return (ConfigKeyTypes.BaseConfigKey<?>) f.get(null);
+                    } catch (IllegalAccessException e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .collect(ImmutableCollectors.toList());
 
-        for (Field f : values) {
-            // ignore non-static fields
-            if (!Modifier.isStatic(f.getModifiers())) {
-                continue;
-            }
-
-            // ignore fields that aren't configkeys
-            if (!ConfigKey.class.equals(f.getType())) {
-                continue;
-            }
-
-            try {
-                // get the key instance
-                ConfigKeyTypes.BaseConfigKey<?> key = (ConfigKeyTypes.BaseConfigKey<?>) f.get(null);
-                // set the ordinal value of the key.
-                key.ordinal = i++;
-                // add the key to the return map
-                keys.put(f.getName(), key);
-            } catch (Exception e) {
-                throw new RuntimeException("Exception processing field: " + f, e);
-            }
+        // set ordinal values
+        for (int i = 0; i < KEYS.size(); i++) {
+            KEYS.get(i).ordinal = i;
         }
-
-        KEYS = ImmutableMap.copyOf(keys);
-        SIZE = i;
     }
 
     /**
-     * Gets a map of the keys defined in this class.
-     *
-     * <p>The string key in the map is the {@link Field#getName() field name}
-     * corresponding to each key.</p>
+     * Gets a list of the keys defined in this class.
      *
      * @return the defined keys
      */
-    public static Map<String, ConfigKey<?>> getKeys() {
+    public static List<? extends ConfigKey<?>> getKeys() {
         return KEYS;
-    }
-
-    /**
-     * Gets the number of defined keys.
-     *
-     * @return how many keys are defined in this class
-     */
-    public static int size() {
-        return SIZE;
     }
 
 }

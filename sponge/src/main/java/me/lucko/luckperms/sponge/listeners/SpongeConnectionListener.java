@@ -59,13 +59,21 @@ public class SpongeConnectionListener extends AbstractConnectionListener {
     @IsCancelled(Tristate.UNDEFINED)
     public void onClientAuth(ClientConnectionEvent.Auth e) {
         /* Called when the player first attempts a connection with the server.
-           Listening on AFTER_PRE priority to allow plugins to modify username / UUID data here. (auth plugins) */
+           Listening on AFTER_PRE priority to allow plugins to modify username / UUID data here. (auth plugins)
+           Also, give other plugins a chance to cancel the event. */
 
         final GameProfile profile = e.getProfile();
         final String username = profile.getName().orElseThrow(() -> new RuntimeException("No username present for user " + profile.getUniqueId()));
 
         if (this.plugin.getConfiguration().get(ConfigKeys.DEBUG_LOGINS)) {
             this.plugin.getLogger().info("Processing auth event for " + profile.getUniqueId() + " - " + profile.getName());
+        }
+
+        if (e.isCancelled()) {
+            // another plugin has disallowed the login.
+            this.plugin.getLogger().info("Another plugin has cancelled the connection for " + profile.getUniqueId() + " - " + username + ". No permissions data will be loaded.");
+            this.deniedAsyncLogin.add(profile.getUniqueId());
+            return;
         }
 
         /* Actually process the login for the connection.
@@ -80,7 +88,7 @@ public class SpongeConnectionListener extends AbstractConnectionListener {
         try {
             User user = loadUser(profile.getUniqueId(), username);
             recordConnection(profile.getUniqueId());
-            this.plugin.getEventFactory().handlePlayerLoginProcess(profile.getUniqueId(), username, user);
+            this.plugin.getEventDispatcher().dispatchPlayerLoginProcess(profile.getUniqueId(), username, user);
         } catch (Exception ex) {
             this.plugin.getLogger().severe("Exception occurred whilst loading data for " + profile.getUniqueId() + " - " + profile.getName());
             ex.printStackTrace();
@@ -91,7 +99,7 @@ public class SpongeConnectionListener extends AbstractConnectionListener {
             e.setMessageCancelled(false);
             //noinspection deprecation
             e.setMessage(TextSerializers.LEGACY_FORMATTING_CODE.deserialize(Message.LOADING_DATABASE_ERROR.asString(this.plugin.getLocaleManager())));
-            this.plugin.getEventFactory().handlePlayerLoginProcess(profile.getUniqueId(), username, null);
+            this.plugin.getEventDispatcher().dispatchPlayerLoginProcess(profile.getUniqueId(), username, null);
         }
     }
 

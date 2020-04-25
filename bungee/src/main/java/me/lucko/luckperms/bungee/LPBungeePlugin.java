@@ -25,8 +25,6 @@
 
 package me.lucko.luckperms.bungee;
 
-import me.lucko.luckperms.api.Contexts;
-import me.lucko.luckperms.api.LuckPermsApi;
 import me.lucko.luckperms.bungee.calculator.BungeeCalculatorFactory;
 import me.lucko.luckperms.bungee.context.BackendServerCalculator;
 import me.lucko.luckperms.bungee.context.BungeeContextManager;
@@ -52,6 +50,8 @@ import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.tasks.CacheHousekeepingTask;
 import me.lucko.luckperms.common.tasks.ExpireTemporaryTask;
 
+import net.luckperms.api.LuckPerms;
+import net.luckperms.api.query.QueryOptions;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 
 import java.io.File;
@@ -118,7 +118,8 @@ public class LPBungeePlugin extends AbstractLuckPermsPlugin {
     @Override
     protected void registerCommands() {
         this.commandManager = new CommandManager(this);
-        this.bootstrap.getProxy().getPluginManager().registerCommand(this.bootstrap, new BungeeCommandExecutor(this, this.commandManager));
+        BungeeCommandExecutor command = new BungeeCommandExecutor(this, this.commandManager);
+        command.register();
 
         // disable the default Bungee /perms command so it gets handled by the Bukkit plugin
         this.bootstrap.getProxy().getDisabledCommands().add("perms");
@@ -152,12 +153,12 @@ public class LPBungeePlugin extends AbstractLuckPermsPlugin {
     }
 
     @Override
-    protected AbstractEventBus provideEventBus(LuckPermsApiProvider apiProvider) {
+    protected AbstractEventBus<?> provideEventBus(LuckPermsApiProvider apiProvider) {
         return new BungeeEventBus(this, apiProvider);
     }
 
     @Override
-    protected void registerApiOnPlatform(LuckPermsApi api) {
+    protected void registerApiOnPlatform(LuckPerms api) {
         // BungeeCord doesn't have a services manager
     }
 
@@ -188,8 +189,8 @@ public class LPBungeePlugin extends AbstractLuckPermsPlugin {
     }
 
     @Override
-    public Optional<Contexts> getContextForUser(User user) {
-        return this.bootstrap.getPlayer(user.getUuid()).map(player -> this.contextManager.getApplicableContexts(player));
+    public Optional<QueryOptions> getQueryOptionsForUser(User user) {
+        return this.bootstrap.getPlayer(user.getUniqueId()).map(player -> this.contextManager.getQueryOptions(player));
     }
 
     @Override

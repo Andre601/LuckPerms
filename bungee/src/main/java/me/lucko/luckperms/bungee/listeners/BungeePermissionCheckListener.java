@@ -25,15 +25,15 @@
 
 package me.lucko.luckperms.bungee.listeners;
 
-import me.lucko.luckperms.api.Contexts;
-import me.lucko.luckperms.api.Tristate;
-import me.lucko.luckperms.api.context.ContextSet;
 import me.lucko.luckperms.bungee.LPBungeePlugin;
 import me.lucko.luckperms.bungee.event.TristateCheckEvent;
 import me.lucko.luckperms.common.calculator.result.TristateResult;
 import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.model.User;
+import me.lucko.luckperms.common.query.QueryOptionsImpl;
 
+import net.luckperms.api.query.QueryOptions;
+import net.luckperms.api.util.Tristate;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.event.PermissionCheckEvent;
 import net.md_5.bungee.api.plugin.Listener;
@@ -62,12 +62,16 @@ public class BungeePermissionCheckListener implements Listener {
 
         User user = this.plugin.getUserManager().getIfLoaded(player.getUniqueId());
         if (user == null) {
+            this.plugin.getLogger().warn("A permission check was made for player " + player.getName() + " - " + player.getUniqueId() + ", " +
+                    "but LuckPerms does not have any permissions data loaded for them. Perhaps their UUID has been altered since login?");
+            new Exception().printStackTrace();
+
             e.setHasPermission(false);
-            throw new IllegalStateException("No permissions data present for player: " + player.getName() + " - " + player.getUniqueId());
+            return;
         }
 
-        Contexts contexts = this.plugin.getContextManager().getApplicableContexts(player);
-        Tristate result = user.getCachedData().getPermissionData(contexts).getPermissionValue(e.getPermission(), me.lucko.luckperms.common.verbose.event.PermissionCheckEvent.Origin.PLATFORM_PERMISSION_CHECK).result();
+        QueryOptions queryOptions = this.plugin.getContextManager().getQueryOptions(player);
+        Tristate result = user.getCachedData().getPermissionData(queryOptions).checkPermission(e.getPermission(), me.lucko.luckperms.common.verbose.event.PermissionCheckEvent.Origin.PLATFORM_PERMISSION_CHECK).result();
         if (result == Tristate.UNDEFINED && this.plugin.getConfiguration().get(ConfigKeys.APPLY_BUNGEE_CONFIG_PERMISSIONS)) {
             return; // just use the result provided by the proxy when the event was created
         }
@@ -88,12 +92,16 @@ public class BungeePermissionCheckListener implements Listener {
 
         User user = this.plugin.getUserManager().getIfLoaded(player.getUniqueId());
         if (user == null) {
+            this.plugin.getLogger().warn("A permission check was made for player " + player.getName() + " - " + player.getUniqueId() + ", " +
+                    "but LuckPerms does not have any permissions data loaded for them. Perhaps their UUID has been altered since login?");
+            new Exception().printStackTrace();
+
             e.setResult(Tristate.UNDEFINED);
-            throw new IllegalStateException("No permissions data present for player: " + player.getName() + " - " + player.getUniqueId());
+            return;
         }
 
-        Contexts contexts = this.plugin.getContextManager().getApplicableContexts(player);
-        Tristate result = user.getCachedData().getPermissionData(contexts).getPermissionValue(e.getPermission(), me.lucko.luckperms.common.verbose.event.PermissionCheckEvent.Origin.PLATFORM_LOOKUP_CHECK).result();
+        QueryOptions queryOptions = this.plugin.getContextManager().getQueryOptions(player);
+        Tristate result = user.getCachedData().getPermissionData(queryOptions).checkPermission(e.getPermission(), me.lucko.luckperms.common.verbose.event.PermissionCheckEvent.Origin.PLATFORM_LOOKUP_CHECK).result();
         if (result == Tristate.UNDEFINED && this.plugin.getConfiguration().get(ConfigKeys.APPLY_BUNGEE_CONFIG_PERMISSIONS)) {
             return; // just use the result provided by the proxy when the event was created
         }
@@ -111,10 +119,10 @@ public class BungeePermissionCheckListener implements Listener {
         Objects.requireNonNull(e.getSender(), "sender");
 
         String permission = e.getPermission();
-        Tristate result = Tristate.fromBoolean(e.hasPermission());
+        Tristate result = Tristate.of(e.hasPermission());
         String name = "internal/" + e.getSender().getName();
 
-        this.plugin.getVerboseHandler().offerPermissionCheckEvent(me.lucko.luckperms.common.verbose.event.PermissionCheckEvent.Origin.PLATFORM_PERMISSION_CHECK, name, ContextSet.empty(), permission, TristateResult.of(result));
+        this.plugin.getVerboseHandler().offerPermissionCheckEvent(me.lucko.luckperms.common.verbose.event.PermissionCheckEvent.Origin.PLATFORM_PERMISSION_CHECK, name, QueryOptionsImpl.DEFAULT_CONTEXTUAL, permission, TristateResult.of(result));
         this.plugin.getPermissionRegistry().offer(permission);
     }
 
@@ -131,7 +139,7 @@ public class BungeePermissionCheckListener implements Listener {
         Tristate result = e.getResult();
         String name = "internal/" + e.getSender().getName();
 
-        this.plugin.getVerboseHandler().offerPermissionCheckEvent(me.lucko.luckperms.common.verbose.event.PermissionCheckEvent.Origin.PLATFORM_LOOKUP_CHECK, name, ContextSet.empty(), permission, TristateResult.of(result));
+        this.plugin.getVerboseHandler().offerPermissionCheckEvent(me.lucko.luckperms.common.verbose.event.PermissionCheckEvent.Origin.PLATFORM_LOOKUP_CHECK, name, QueryOptionsImpl.DEFAULT_CONTEXTUAL, permission, TristateResult.of(result));
         this.plugin.getPermissionRegistry().offer(permission);
     }
 }

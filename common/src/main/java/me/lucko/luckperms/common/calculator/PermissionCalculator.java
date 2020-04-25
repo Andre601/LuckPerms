@@ -27,13 +27,15 @@ package me.lucko.luckperms.common.calculator;
 
 import com.google.common.collect.ImmutableList;
 
-import me.lucko.luckperms.api.Tristate;
 import me.lucko.luckperms.common.cache.LoadingMap;
 import me.lucko.luckperms.common.cacheddata.CacheMetadata;
 import me.lucko.luckperms.common.calculator.processor.PermissionProcessor;
 import me.lucko.luckperms.common.calculator.result.TristateResult;
+import me.lucko.luckperms.common.model.HolderType;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.verbose.event.PermissionCheckEvent;
+
+import net.luckperms.api.util.Tristate;
 
 import org.checkerframework.checker.nullness.qual.NonNull;
 
@@ -46,30 +48,31 @@ import java.util.function.Function;
  */
 public class PermissionCalculator implements Function<String, TristateResult> {
 
-    /**
-     * The plugin instance
-     */
+    /** The plugin instance */
     private final LuckPermsPlugin plugin;
 
-    /**
-     * Info about the nature of this calculator.
-     */
+    /** Info about the nature of this calculator. */
     private final CacheMetadata metadata;
 
-    /**
-     * The processors which back this calculator
-     */
+    /** The processors which back this calculator */
     private final ImmutableList<PermissionProcessor> processors;
 
-    /**
-     * Loading cache for permission checks
-     */
+    /** Loading cache for permission checks */
     private final LoadingMap<String, TristateResult> lookupCache = LoadingMap.of(this);
+
+    /** The object name passed to the verbose handler when checks are made */
+    private final String verboseCheckTarget;
 
     public PermissionCalculator(LuckPermsPlugin plugin, CacheMetadata metadata, ImmutableList<PermissionProcessor> processors) {
         this.plugin = plugin;
         this.metadata = metadata;
         this.processors = processors;
+
+        if (this.metadata.getHolderType() == HolderType.GROUP) {
+            this.verboseCheckTarget = "group/" + this.metadata.getObjectName();
+        } else {
+            this.verboseCheckTarget = this.metadata.getObjectName();
+        }
     }
 
     /**
@@ -81,12 +84,12 @@ public class PermissionCalculator implements Function<String, TristateResult> {
      * @param origin marks where this check originated from
      * @return the result
      */
-    public TristateResult getPermissionValue(String permission, PermissionCheckEvent.Origin origin) {
+    public TristateResult checkPermission(String permission, PermissionCheckEvent.Origin origin) {
         // get the result
         TristateResult result = this.lookupCache.get(permission);
 
         // log this permission lookup to the verbose handler
-        this.plugin.getVerboseHandler().offerPermissionCheckEvent(origin, this.metadata.getObjectName(), this.metadata.getContext(), permission, result);
+        this.plugin.getVerboseHandler().offerPermissionCheckEvent(origin, this.verboseCheckTarget, this.metadata.getQueryOptions(), permission, result);
 
         // return the result
         return result;

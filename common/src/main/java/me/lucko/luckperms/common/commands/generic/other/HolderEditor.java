@@ -27,66 +27,40 @@ package me.lucko.luckperms.common.commands.generic.other;
 
 import com.google.gson.JsonObject;
 
-import me.lucko.luckperms.api.context.ContextSet;
 import me.lucko.luckperms.common.command.CommandResult;
-import me.lucko.luckperms.common.command.abstraction.SubCommand;
+import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
-import me.lucko.luckperms.common.config.ConfigKeys;
+import me.lucko.luckperms.common.context.contextset.ImmutableContextSetImpl;
 import me.lucko.luckperms.common.locale.LocaleManager;
 import me.lucko.luckperms.common.locale.command.CommandSpec;
 import me.lucko.luckperms.common.locale.message.Message;
+import me.lucko.luckperms.common.model.HolderType;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.util.Predicates;
 import me.lucko.luckperms.common.web.WebEditor;
 
-import net.kyori.text.Component;
-import net.kyori.text.TextComponent;
-import net.kyori.text.event.ClickEvent;
-import net.kyori.text.event.HoverEvent;
-import net.kyori.text.format.TextColor;
-
 import java.util.Collections;
 import java.util.List;
 
-public class HolderEditor<T extends PermissionHolder> extends SubCommand<T> {
-    public HolderEditor(LocaleManager locale, boolean user) {
-        super(CommandSpec.HOLDER_EDITOR.localize(locale), "editor", user ? CommandPermission.USER_EDITOR : CommandPermission.GROUP_EDITOR, Predicates.alwaysFalse());
+public class HolderEditor<T extends PermissionHolder> extends ChildCommand<T> {
+    public HolderEditor(LocaleManager locale, HolderType type) {
+        super(CommandSpec.HOLDER_EDITOR.localize(locale), "editor", type == HolderType.USER ? CommandPermission.USER_EDITOR : CommandPermission.GROUP_EDITOR, Predicates.alwaysFalse());
     }
 
     @Override
     public CommandResult execute(LuckPermsPlugin plugin, Sender sender, T holder, List<String> args, String label) {
-        if (ArgumentPermissions.checkViewPerms(plugin, sender, getPermission().get(), holder) || ArgumentPermissions.checkGroup(plugin, sender, holder, ContextSet.empty())) {
+        if (ArgumentPermissions.checkViewPerms(plugin, sender, getPermission().get(), holder) || ArgumentPermissions.checkGroup(plugin, sender, holder, ImmutableContextSetImpl.EMPTY)) {
             Message.COMMAND_NO_PERMISSION.send(sender);
             return CommandResult.NO_PERMISSION;
         }
 
         Message.EDITOR_START.send(sender);
 
-        // form the payload data
-        JsonObject payload = WebEditor.formPayload(Collections.singletonList(holder), sender, label, plugin);
-
-        // upload the payload data to gist
-        String pasteId = plugin.getBytebin().postJson(payload, true).id();
-        if (pasteId == null) {
-            Message.EDITOR_UPLOAD_FAILURE.send(sender);
-            return CommandResult.STATE_ERROR;
-        }
-
-        // form a url for the editor
-        String url = plugin.getConfiguration().get(ConfigKeys.WEB_EDITOR_URL_PATTERN) + "#" + pasteId;
-
-        Message.EDITOR_URL.send(sender);
-
-        Component message = TextComponent.builder(url).color(TextColor.AQUA)
-                .clickEvent(ClickEvent.openUrl(url))
-                .hoverEvent(HoverEvent.showText(TextComponent.of("Click to open the editor.").color(TextColor.GRAY)))
-                .build();
-
-        sender.sendMessage(message);
-        return CommandResult.SUCCESS;
+        JsonObject payload = WebEditor.formPayload(Collections.singletonList(holder), Collections.emptyList(), sender, label, plugin);
+        return WebEditor.post(payload, sender, plugin);
     }
 
 }

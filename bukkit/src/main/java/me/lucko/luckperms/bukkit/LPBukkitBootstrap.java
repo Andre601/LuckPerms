@@ -25,13 +25,14 @@
 
 package me.lucko.luckperms.bukkit;
 
-import me.lucko.luckperms.api.platform.PlatformType;
-import me.lucko.luckperms.bukkit.compat.NullSafeConsoleCommandSender;
+import me.lucko.luckperms.bukkit.util.NullSafeConsoleCommandSender;
 import me.lucko.luckperms.common.dependencies.classloader.PluginClassLoader;
 import me.lucko.luckperms.common.dependencies.classloader.ReflectionClassLoader;
 import me.lucko.luckperms.common.plugin.bootstrap.LuckPermsBootstrap;
 import me.lucko.luckperms.common.plugin.logging.JavaPluginLogger;
 import me.lucko.luckperms.common.plugin.logging.PluginLogger;
+
+import net.luckperms.api.platform.Platform;
 
 import org.bukkit.OfflinePlayer;
 import org.bukkit.Server;
@@ -41,6 +42,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -80,12 +82,13 @@ public class LPBukkitBootstrap extends JavaPlugin implements LuckPermsBootstrap 
     /**
      * The time when the plugin was enabled
      */
-    private long startTime;
+    private Instant startTime;
 
     // load/enable latches
     private final CountDownLatch loadLatch = new CountDownLatch(1);
     private final CountDownLatch enableLatch = new CountDownLatch(1);
     private boolean serverStarting = true;
+    private boolean serverStopping = false;
 
     // if the plugin has been loaded on an incompatible version
     private boolean incompatibleVersion = false;
@@ -148,7 +151,9 @@ public class LPBukkitBootstrap extends JavaPlugin implements LuckPermsBootstrap 
             return;
         }
 
-        this.startTime = System.currentTimeMillis();
+        this.serverStarting = true;
+        this.serverStopping = false;
+        this.startTime = Instant.now();
         try {
             this.plugin.enable();
 
@@ -165,8 +170,8 @@ public class LPBukkitBootstrap extends JavaPlugin implements LuckPermsBootstrap 
             return;
         }
 
+        this.serverStopping = true;
         this.plugin.disable();
-        this.serverStarting = true;
     }
 
     @Override
@@ -183,6 +188,10 @@ public class LPBukkitBootstrap extends JavaPlugin implements LuckPermsBootstrap 
         return this.serverStarting;
     }
 
+    public boolean isServerStopping() {
+        return this.serverStopping;
+    }
+
     // provide information about the plugin
 
     @Override
@@ -191,15 +200,15 @@ public class LPBukkitBootstrap extends JavaPlugin implements LuckPermsBootstrap 
     }
 
     @Override
-    public long getStartupTime() {
+    public Instant getStartupTime() {
         return this.startTime;
     }
 
     // provide information about the platform
 
     @Override
-    public PlatformType getType() {
-        return PlatformType.BUKKIT;
+    public Platform.Type getType() {
+        return Platform.Type.BUKKIT;
     }
 
     @Override
@@ -223,19 +232,19 @@ public class LPBukkitBootstrap extends JavaPlugin implements LuckPermsBootstrap 
     }
 
     @Override
-    public Optional<Player> getPlayer(UUID uuid) {
-        return Optional.ofNullable(getServer().getPlayer(uuid));
+    public Optional<Player> getPlayer(UUID uniqueId) {
+        return Optional.ofNullable(getServer().getPlayer(uniqueId));
     }
 
     @Override
-    public Optional<UUID> lookupUuid(String username) {
+    public Optional<UUID> lookupUniqueId(String username) {
         //noinspection deprecation
         return Optional.ofNullable(getServer().getOfflinePlayer(username)).map(OfflinePlayer::getUniqueId);
     }
 
     @Override
-    public Optional<String> lookupUsername(UUID uuid) {
-        return Optional.ofNullable(getServer().getOfflinePlayer(uuid)).map(OfflinePlayer::getName);
+    public Optional<String> lookupUsername(UUID uniqueId) {
+        return Optional.ofNullable(getServer().getOfflinePlayer(uniqueId)).map(OfflinePlayer::getName);
     }
 
     @Override
@@ -254,8 +263,8 @@ public class LPBukkitBootstrap extends JavaPlugin implements LuckPermsBootstrap 
     }
 
     @Override
-    public boolean isPlayerOnline(UUID uuid) {
-        Player player = getServer().getPlayer(uuid);
+    public boolean isPlayerOnline(UUID uniqueId) {
+        Player player = getServer().getPlayer(uniqueId);
         return player != null && player.isOnline();
     }
 

@@ -25,18 +25,15 @@
 
 package me.lucko.luckperms.common.commands.generic.meta;
 
-import me.lucko.luckperms.api.ChatMetaType;
-import me.lucko.luckperms.api.Contexts;
-import me.lucko.luckperms.api.TemporaryDataMutateResult;
-import me.lucko.luckperms.api.TemporaryMergeBehaviour;
-import me.lucko.luckperms.api.context.MutableContextSet;
-import me.lucko.luckperms.common.actionlog.ExtendedLogEntry;
+import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.cacheddata.type.MetaAccumulator;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.CommandException;
-import me.lucko.luckperms.common.command.abstraction.SharedSubCommand;
+import me.lucko.luckperms.common.command.abstraction.GenericChildCommand;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
+import me.lucko.luckperms.common.command.tabcomplete.TabCompletions;
 import me.lucko.luckperms.common.command.utils.ArgumentParser;
 import me.lucko.luckperms.common.command.utils.MessageUtils;
 import me.lucko.luckperms.common.command.utils.StorageAssistant;
@@ -46,8 +43,8 @@ import me.lucko.luckperms.common.locale.command.CommandSpec;
 import me.lucko.luckperms.common.locale.message.Message;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.PermissionHolder;
-import me.lucko.luckperms.common.node.factory.NodeFactory;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
+import me.lucko.luckperms.common.query.QueryOptionsImpl;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.util.DurationFormatter;
 import me.lucko.luckperms.common.util.Predicates;
@@ -55,11 +52,17 @@ import me.lucko.luckperms.common.util.TextUtils;
 
 import net.kyori.text.TextComponent;
 import net.kyori.text.event.HoverEvent;
+import net.luckperms.api.context.MutableContextSet;
+import net.luckperms.api.model.data.DataMutateResult;
+import net.luckperms.api.model.data.DataType;
+import net.luckperms.api.model.data.TemporaryNodeMergeStrategy;
+import net.luckperms.api.node.ChatMetaType;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.OptionalInt;
 
-public class MetaSetTempChatMeta extends SharedSubCommand {
+public class MetaSetTempChatMeta extends GenericChildCommand {
     private final ChatMetaType type;
 
     public MetaSetTempChatMeta(LocaleManager locale, ChatMetaType type) {
@@ -82,8 +85,8 @@ public class MetaSetTempChatMeta extends SharedSubCommand {
 
         int priority = ArgumentParser.parseIntOrElse(0, args, Integer.MIN_VALUE);
         String meta;
-        long duration;
-        TemporaryMergeBehaviour modifier;
+        Duration duration;
+        TemporaryNodeMergeStrategy modifier;
         MutableContextSet context;
 
         if (priority == Integer.MIN_VALUE) {
@@ -112,12 +115,11 @@ public class MetaSetTempChatMeta extends SharedSubCommand {
         }
 
         // remove all other prefixes/suffixes set in these contexts
-        holder.removeIf(context, this.type::matches);
+        holder.removeIf(DataType.NORMAL, context, this.type.nodeType()::matches, false);
 
         // determine the priority to set at
         if (priority == Integer.MIN_VALUE) {
-            MetaAccumulator metaAccumulator = holder.accumulateMeta(null, Contexts.global().setContexts(context));
-            metaAccumulator.complete();
+            MetaAccumulator metaAccumulator = holder.accumulateMeta(QueryOptionsImpl.DEFAULT_CONTEXTUAL.toBuilder().context(context).build());
             priority = metaAccumulator.getChatMeta(this.type).keySet().stream().mapToInt(e -> e).max().orElse(0) + 1;
 
             if (holder instanceof Group) {
@@ -128,12 +130,12 @@ public class MetaSetTempChatMeta extends SharedSubCommand {
             }
         }
 
-        TemporaryDataMutateResult ret = holder.setPermission(NodeFactory.buildChatMetaNode(this.type, priority, meta).setExpiry(duration).withExtraContext(context).build(), modifier);
+        DataMutateResult.WithMergedNode result = holder.setNode(DataType.NORMAL, this.type.builder(meta, priority).expiry(duration).withContext(context).build(), modifier);
 
-        if (ret.getResult().asBoolean()) {
-            duration = ret.getMergedNode().getExpiryUnixTime();
+        if (result.getResult().wasSuccessful()) {
+            duration = result.getMergedNode().getExpiryDuration();
 
-            TextComponent.Builder builder = Message.ADD_TEMP_CHATMETA_SUCCESS.asComponent(plugin.getLocaleManager(), holder.getFormattedDisplayName(), this.type.name().toLowerCase(), meta, priority, DurationFormatter.LONG.formatDateDiff(duration), MessageUtils.contextSetToString(plugin.getLocaleManager(), context)).toBuilder();
+            TextComponent.Builder builder = Message.ADD_TEMP_CHATMETA_SUCCESS.asComponent(plugin.getLocaleManager(), holder.getFormattedDisplayName(), this.type.name().toLowerCase(), meta, priority, DurationFormatter.LONG.format(duration), MessageUtils.contextSetToString(plugin.getLocaleManager(), context)).toBuilder();
             HoverEvent event = HoverEvent.showText(TextUtils.fromLegacy(
                     "¥3Raw " + this.type.name().toLowerCase() + ": ¥r" + meta,
                     '¥'
@@ -141,8 +143,8 @@ public class MetaSetTempChatMeta extends SharedSubCommand {
             builder.applyDeep(c -> c.hoverEvent(event));
             sender.sendMessage(builder.build());
 
-            ExtendedLogEntry.build().actor(sender).acted(holder)
-                    .action("meta" , "settemp" + this.type.name().toLowerCase(), priority, meta, duration, context)
+            LoggedAction.build().source(sender).target(holder)
+                    .description("meta" , "settemp" + this.type.name().toLowerCase(), priority, meta, duration, context)
                     .build().submit(plugin, sender);
 
             StorageAssistant.save(holder, sender, plugin);
@@ -151,5 +153,12 @@ public class MetaSetTempChatMeta extends SharedSubCommand {
             Message.ALREADY_HAS_TEMP_CHAT_META.send(sender, holder.getFormattedDisplayName(), this.type.name().toLowerCase(), meta, priority, MessageUtils.contextSetToString(plugin.getLocaleManager(), context));
             return CommandResult.STATE_ERROR;
         }
+    }
+
+    @Override
+    public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
+        return TabCompleter.create()
+                .from(2, TabCompletions.contexts(plugin))
+                .complete(args);
     }
 }

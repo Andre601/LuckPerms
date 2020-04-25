@@ -44,7 +44,7 @@ public class ExpireTemporaryTask implements Runnable {
             if (shouldSkip(group)) {
                 continue;
             }
-            if (group.auditTemporaryPermissions()) {
+            if (group.auditTemporaryNodes()) {
                 this.plugin.getStorage().saveGroup(group);
                 groupChanges = true;
             }
@@ -54,7 +54,7 @@ public class ExpireTemporaryTask implements Runnable {
             if (shouldSkip(user)) {
                 continue;
             }
-            if (user.auditTemporaryPermissions()) {
+            if (user.auditTemporaryNodes()) {
                 this.plugin.getStorage().saveUser(user);
             }
         }
@@ -67,7 +67,7 @@ public class ExpireTemporaryTask implements Runnable {
 
     // return true if the holder's io lock is currently held, false otherwise
     private static boolean shouldSkip(PermissionHolder holder) {
-        // if the holder is currently being manipulated by the storage dao,
+        // if the holder is currently being manipulated by the storage impl,
         // don't attempt to audit temporary permissions
         if (!holder.getIoLock().tryLock()) {
             // if #tryLock returns false, it means it's held by something else

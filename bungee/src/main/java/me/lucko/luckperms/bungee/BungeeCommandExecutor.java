@@ -25,45 +25,71 @@
 
 package me.lucko.luckperms.bungee;
 
-import com.google.common.base.Joiner;
-import com.google.common.base.Splitter;
-
 import me.lucko.luckperms.common.command.CommandManager;
+import me.lucko.luckperms.common.command.utils.ArgumentTokenizer;
 import me.lucko.luckperms.common.sender.Sender;
 
 import net.md_5.bungee.api.CommandSender;
+import net.md_5.bungee.api.ProxyServer;
 import net.md_5.bungee.api.plugin.Command;
 import net.md_5.bungee.api.plugin.TabExecutor;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Stream;
 
 public class BungeeCommandExecutor extends Command implements TabExecutor {
-    private static final Splitter TAB_COMPLETE_ARGUMENT_SPLITTER = Splitter.on(CommandManager.COMMAND_SEPARATOR_PATTERN);
-    private static final Splitter ARGUMENT_SPLITTER = Splitter.on(CommandManager.COMMAND_SEPARATOR_PATTERN).omitEmptyStrings();
-    private static final Joiner ARGUMENT_JOINER = Joiner.on(' ');
+    /** The main command name */
+    private static final String NAME = "luckpermsbungee";
+
+    /** The command aliases */
+    private static final String[] ALIASES = {"lpb", "bperm", "bperms", "bpermission", "bpermissions"};
+
+    /** The main command name + aliases, prefixed with '/' */
+    private static final String[] SLASH_ALIASES = Stream.concat(
+            Stream.of(NAME),
+            Arrays.stream(ALIASES)
+    ).map(s -> '/' + s).toArray(String[]::new);
+
+    /**
+     * The aliases to register, {@link #ALIASES} + {@link #SLASH_ALIASES}.
+     *
+     * <p>SLASH_ALIASES are registered too so the console can run '/lpb'
+     * in the same way as 'lpb'.</p>
+     */
+    private static final String[] ALIASES_TO_REGISTER = Stream.concat(
+            Arrays.stream(ALIASES),
+            Arrays.stream(SLASH_ALIASES)
+    ).toArray(String[]::new);
 
     private final LPBungeePlugin plugin;
     private final CommandManager manager;
 
     public BungeeCommandExecutor(LPBungeePlugin plugin, CommandManager manager) {
-        super("luckpermsbungee", null, "lpb", "bperm", "bperms", "bpermission", "bpermissions");
+        super(NAME, null, ALIASES_TO_REGISTER);
         this.plugin = plugin;
         this.manager = manager;
     }
 
+    public void register() {
+        ProxyServer proxy = this.plugin.getBootstrap().getProxy();
+        proxy.getPluginManager().registerCommand(this.plugin.getBootstrap(), this);
+
+        // don't allow players to execute the slash aliases - these are just for the console.
+        proxy.getDisabledCommands().addAll(Arrays.asList(SLASH_ALIASES));
+    }
+
     @Override
     public void execute(CommandSender sender, String[] args) {
-        Sender lpSender = this.plugin.getSenderFactory().wrap(sender);
-        List<String> arguments = CommandManager.stripQuotes(ARGUMENT_SPLITTER.splitToList(ARGUMENT_JOINER.join(args)));
-
-        this.manager.onCommand(lpSender, "lpb", arguments);
+        Sender wrapped = this.plugin.getSenderFactory().wrap(sender);
+        List<String> arguments = ArgumentTokenizer.EXECUTE.tokenizeInput(args);
+        this.manager.executeCommand(wrapped, "lpb", arguments);
     }
 
     @Override
     public Iterable<String> onTabComplete(CommandSender sender, String[] args) {
-        Sender lpSender = this.plugin.getSenderFactory().wrap(sender);
-        List<String> arguments = CommandManager.stripQuotes(TAB_COMPLETE_ARGUMENT_SPLITTER.splitToList(ARGUMENT_JOINER.join(args)));
-
-        return this.manager.onTabComplete(lpSender, arguments);
+        Sender wrapped = this.plugin.getSenderFactory().wrap(sender);
+        List<String> arguments = ArgumentTokenizer.TAB_COMPLETE.tokenizeInput(args);
+        return this.manager.tabCompleteCommand(wrapped, arguments);
     }
 }

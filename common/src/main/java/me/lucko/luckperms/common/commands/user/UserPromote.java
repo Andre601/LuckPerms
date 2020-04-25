@@ -25,12 +25,10 @@
 
 package me.lucko.luckperms.common.commands.user;
 
-import me.lucko.luckperms.api.PromotionResult;
-import me.lucko.luckperms.api.context.MutableContextSet;
-import me.lucko.luckperms.common.actionlog.ExtendedLogEntry;
+import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.command.CommandResult;
+import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.abstraction.CommandException;
-import me.lucko.luckperms.common.command.abstraction.SubCommand;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
@@ -48,10 +46,13 @@ import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.storage.misc.DataConstraints;
 import me.lucko.luckperms.common.util.Predicates;
 
+import net.luckperms.api.context.MutableContextSet;
+import net.luckperms.api.track.PromotionResult;
+
 import java.util.List;
 import java.util.function.Predicate;
 
-public class UserPromote extends SubCommand<User> {
+public class UserPromote extends ChildCommand<User> {
     public UserPromote(LocaleManager locale) {
         super(CommandSpec.USER_PROMOTE.localize(locale), "promote", CommandPermission.USER_PROMOTE, Predicates.is(0));
     }
@@ -81,7 +82,7 @@ public class UserPromote extends SubCommand<User> {
             return CommandResult.STATE_ERROR;
         }
 
-        boolean silent = args.remove("-s");
+        boolean dontShowTrackProgress = args.remove("-s");
         MutableContextSet context = ArgumentParser.parseContext(1, args, plugin);
 
         if (ArgumentPermissions.checkContext(plugin, sender, getPermission().get(), context)) {
@@ -116,8 +117,8 @@ public class UserPromote extends SubCommand<User> {
 
                 Message.USER_TRACK_ADDED_TO_FIRST.send(sender, user.getFormattedDisplayName(), result.getGroupTo().get(), MessageUtils.contextSetToString(plugin.getLocaleManager(), context));
 
-                ExtendedLogEntry.build().actor(sender).acted(user)
-                        .action("promote", track.getName(), context)
+                LoggedAction.build().source(sender).target(user)
+                        .description("promote", track.getName(), context)
                         .build().submit(plugin, sender);
 
                 StorageAssistant.save(user, sender, plugin);
@@ -129,12 +130,12 @@ public class UserPromote extends SubCommand<User> {
                 String groupTo = result.getGroupTo().get();
 
                 Message.USER_PROMOTE_SUCCESS.send(sender, user.getFormattedDisplayName(), track.getName(), groupFrom, groupTo, MessageUtils.contextSetToString(plugin.getLocaleManager(), context));
-                if (!silent) {
+                if (!dontShowTrackProgress) {
                     Message.BLANK.send(sender, MessageUtils.listToArrowSep(track.getGroups(), groupFrom, groupTo, false));
                 }
 
-                ExtendedLogEntry.build().actor(sender).acted(user)
-                        .action("promote", track.getName(), context)
+                LoggedAction.build().source(sender).target(user)
+                        .description("promote", track.getName(), context)
                         .build().submit(plugin, sender);
 
                 StorageAssistant.save(user, sender, plugin);
@@ -150,6 +151,7 @@ public class UserPromote extends SubCommand<User> {
     public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
         return TabCompleter.create()
                 .at(0, TabCompletions.tracks(plugin))
+                .from(1, TabCompletions.contexts(plugin))
                 .complete(args);
     }
 }

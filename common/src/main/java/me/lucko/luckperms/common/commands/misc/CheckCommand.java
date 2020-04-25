@@ -25,7 +25,6 @@
 
 package me.lucko.luckperms.common.commands.misc;
 
-import me.lucko.luckperms.api.Tristate;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.SingleCommand;
 import me.lucko.luckperms.common.command.access.CommandPermission;
@@ -43,9 +42,10 @@ import me.lucko.luckperms.common.util.Predicates;
 import me.lucko.luckperms.common.util.Uuids;
 import me.lucko.luckperms.common.verbose.event.PermissionCheckEvent;
 
+import net.luckperms.api.util.Tristate;
+
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 public class CheckCommand extends SingleCommand {
     public CheckCommand(LocaleManager locale) {
@@ -70,7 +70,7 @@ public class CheckCommand extends SingleCommand {
             return CommandResult.STATE_ERROR;
         }
 
-        Tristate tristate = user.getCachedData().getPermissionData(plugin.getContextForUser(user).orElse(plugin.getContextManager().getStaticContexts())).getPermissionValue(permission, PermissionCheckEvent.Origin.INTERNAL).result();
+        Tristate tristate = user.getCachedData().getPermissionData(plugin.getQueryOptionsForUser(user).orElse(plugin.getContextManager().getStaticQueryOptions())).checkPermission(permission, PermissionCheckEvent.Origin.INTERNAL).result();
         Message.CHECK_RESULT.send(sender, user.getFormattedDisplayName(), permission, MessageUtils.formatTristate(tristate));
         return CommandResult.SUCCESS;
     }
@@ -78,7 +78,7 @@ public class CheckCommand extends SingleCommand {
     @Override
     public List<String> tabComplete(LuckPermsPlugin plugin, Sender sender, List<String> args) {
         return TabCompleter.create()
-                .at(0, CompletionSupplier.startsWith(() -> plugin.getBootstrap().getPlayerList().collect(Collectors.toList())))
+                .at(0, CompletionSupplier.startsWith(() -> plugin.getBootstrap().getPlayerList()))
                 .at(1, TabCompletions.permissions(plugin))
                 .complete(args);
     }

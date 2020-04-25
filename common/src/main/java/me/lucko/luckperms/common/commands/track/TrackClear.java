@@ -25,9 +25,9 @@
 
 package me.lucko.luckperms.common.commands.track;
 
-import me.lucko.luckperms.common.actionlog.ExtendedLogEntry;
+import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.command.CommandResult;
-import me.lucko.luckperms.common.command.abstraction.SubCommand;
+import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.access.CommandPermission;
 import me.lucko.luckperms.common.command.utils.StorageAssistant;
 import me.lucko.luckperms.common.locale.LocaleManager;
@@ -40,7 +40,7 @@ import me.lucko.luckperms.common.util.Predicates;
 
 import java.util.List;
 
-public class TrackClear extends SubCommand<Track> {
+public class TrackClear extends ChildCommand<Track> {
     public TrackClear(LocaleManager locale) {
         super(CommandSpec.TRACK_CLEAR.localize(locale), "clear", CommandPermission.TRACK_CLEAR, Predicates.alwaysFalse());
     }
@@ -50,8 +50,8 @@ public class TrackClear extends SubCommand<Track> {
         track.clearGroups();
         Message.TRACK_CLEAR.send(sender, track.getName());
 
-        ExtendedLogEntry.build().actor(sender).acted(track)
-                .action("clear")
+        LoggedAction.build().source(sender).target(track)
+                .description("clear")
                 .build().submit(plugin, sender);
 
         StorageAssistant.save(track, sender, plugin);

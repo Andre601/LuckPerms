@@ -25,46 +25,131 @@
 
 package me.lucko.luckperms.common.node.utils;
 
+import com.google.common.base.CharMatcher;
 import com.google.common.base.Splitter;
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterators;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
-import java.util.List;
+import java.util.Iterator;
 import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
-public final class ShorthandParser {
-    private ShorthandParser() {}
+/**
+ * Utility to expand shorthand nodes
+ */
+public enum ShorthandParser {
 
-    private static final List<Function<String, Iterable<String>>> PARSERS = ImmutableList.<Function<String, Iterable<String>>>builder()
-            .add(new ListParser())
-            .add(new CharacterRangeParser())
-            .add(new NumericRangeParser())
-            .build();
+    /**
+     * Expands "1-4" to ["1", "2", "3", "4"]
+     */
+    NUMERIC_RANGE {
+        @Override
+        public Iterator<String> extract(String input) throws NumberFormatException {
+            int index = input.indexOf(RANGE_SEPARATOR);
+            if (index == -1 || index == 0 || index == (input.length() - 1)) {
+                return null;
+            }
 
-    public static Set<String> parseShorthand(String s) {
-        Set<String> results = new HashSet<>(1);
+            return new RangeIterator(Integer.parseInt(input.substring(0, index)), Integer.parseInt(input.substring(index + 1))) {
+                @Override
+                protected String toString(int i) {
+                    return Integer.toString(i);
+                }
+            };
+        }
+    },
+
+    /**
+     * Expands "a-d" to ["a", "b", "c", "d"]
+     */
+    CHARACTER_RANGE {
+        @Override
+        public Iterator<String> extract(String input) {
+            if (input.length() != 3 || input.charAt(1) != RANGE_SEPARATOR) {
+                return null;
+            }
+
+            return new RangeIterator(input.charAt(0), input.charAt(2)) {
+                @Override
+                protected String toString(int i) {
+                    return Character.toString((char) i);
+                }
+            };
+        }
+    },
+
+    /**
+     * Expands "aa,bb|cc" to ["aa", "bb", "cc"]
+     */
+    LIST {
+        private final Splitter splitter = Splitter.on(CharMatcher.anyOf(new String(new char[]{LIST_SEPARATOR, LIST_SEPARATOR_2}))).omitEmptyStrings();
+
+        @Override
+        public Iterator<String> extract(String input) {
+            if (indexOfEither(input, LIST_SEPARATOR, LIST_SEPARATOR_2) == -1) {
+                return Iterators.singletonIterator(input);
+            }
+            return this.splitter.split(input).iterator();
+        }
+    };
+
+    /**
+     * Expands the given input in shorthand notation to a number of strings.
+     *
+     * @param input the input shorthand
+     * @return an iterator of the resultant strings, or optionally null if the input was invalid
+     * @throws IllegalArgumentException if the input was invalid
+     */
+    abstract Iterator<String> extract(String input) throws IllegalArgumentException;
+
+    /** Character used to open a group */
+    private static final char OPEN_GROUP = '{';
+    /** Character used to close a group */
+    private static final char CLOSE_GROUP = '}';
+    /** Another character used to open a group */
+    private static final char OPEN_GROUP_2 = '(';
+    /** Another character used to close a group */
+    private static final char CLOSE_GROUP_2 = ')';
+    /** Character used to separate items in a list */
+    private static final char LIST_SEPARATOR = ',';
+    /** Another character used to separate items in a list */
+    private static final char LIST_SEPARATOR_2 = '|';
+    /** Character used to indicate a range between two values */
+    private static final char RANGE_SEPARATOR = '-';
+
+    /** The parsers */
+    private static final ShorthandParser[] PARSERS = values();
+
+    /**
+     * Parses and expands the shorthand format.
+     *
+     * @param s the string to expand
+     * @return the expanded result
+     */
+    public static Set<String> expandShorthand(String s) {
+        Set<String> results = new HashSet<>();
         results.add(s);
 
+        Set<String> workSet = new HashSet<>();
         while (true) {
-            Set<String> working = new HashSet<>(results.size());
-            int beforeSize = results.size();
 
-            for (String str : results) {
-                Set<String> ret = captureResults(str);
-                if (ret != null) {
-                    working.addAll(ret);
+            boolean work = false;
+            for (String string : results) {
+                Set<String> expanded = matchGroup(string);
+                if (expanded != null) {
+                    work = true;
+                    workSet.addAll(expanded);
                 } else {
-                    working.add(str);
+                    workSet.add(string);
                 }
             }
 
-            if (working.size() != beforeSize) {
-                results = working;
+            if (work) {
+                // set results := workSet, and init an empty workSet for the next iteration
+                // (we actually sneakily reuse the existing results HashSet to avoid having to create a new one)
+                Set<String> temp = results;
+                results = workSet;
+                workSet = temp;
+                workSet.clear();
                 continue;
             }
 
@@ -77,97 +162,72 @@ public final class ShorthandParser {
         return results;
     }
 
-    private static Set<String> captureResults(String s) {
-        s = s.replace('(', '{').replace(')', '}');
-
-        int openingIndex = s.indexOf('{');
+    private static Set<String> matchGroup(String input) {
+        int openingIndex = indexOfEither(input, OPEN_GROUP, OPEN_GROUP_2);
         if (openingIndex == -1) {
             return null;
         }
 
-        int closingIndex = s.indexOf('}');
+        int closingIndex = indexOfEither(input, CLOSE_GROUP, CLOSE_GROUP_2);
         if (closingIndex < openingIndex) {
             return null;
         }
 
-        String before = s.substring(0, openingIndex);
-        String after = s.substring(closingIndex + 1);
-        String between = s.substring(openingIndex + 1, closingIndex);
+        String before = input.substring(0, openingIndex);
+        String after = input.substring(closingIndex + 1);
+        String between = input.substring(openingIndex + 1, closingIndex);
 
-        Set<String> results = new HashSet<>(10);
+        Set<String> results = new HashSet<>();
 
-        for (Function<String, Iterable<String>> parser : PARSERS) {
-            Iterable<String> res = parser.apply(between);
-            if (res != null) {
-                for (String r : res) {
-                    results.add(before + r + after);
+        for (ShorthandParser parser : PARSERS) {
+            try {
+                Iterator<String> extracted = parser.extract(between);
+                if (extracted != null) {
+                    while (extracted.hasNext()) {
+                        results.add(before + extracted.next() + after);
+                    }
+
+                    // break after one parser has matched
+                    break;
                 }
+            } catch (IllegalArgumentException e) {
+                // ignore
             }
         }
 
         return results;
     }
 
-    private static class ListParser implements Function<String, Iterable<String>> {
-        private static final Splitter SPLITTER = Splitter.on(',');
-
-        @Override
-        public Iterable<String> apply(String s) {
-            s = s.replace('|', ',');
-            if (!s.contains(",")) {
-                return Collections.singleton(s);
-            }
-            return SPLITTER.split(s);
+    private static int indexOfEither(String s, char c1, char c2) {
+        int index = s.indexOf(c1);
+        if (index != -1) {
+            return index;
         }
+        return s.indexOf(c2);
     }
 
-    private static class NumericRangeParser implements Function<String, Iterable<String>> {
+    /**
+     * Implements an iterator over a given range of ints.
+     */
+    private abstract static class RangeIterator implements Iterator<String> {
+        private final int max;
+        private int next;
 
-        private static Integer parseInt(String a) {
-            try {
-                return Integer.parseInt(a);
-            } catch (NumberFormatException e) {
-                return null;
-            }
+        RangeIterator(int a, int b) {
+            this.max = Math.max(a, b);
+            this.next = Math.min(a, b);
+        }
+
+        protected abstract String toString(int i);
+
+        @Override
+        public final boolean hasNext() {
+            return this.next <= this.max;
         }
 
         @Override
-        public Iterable<String> apply(String s) {
-            int index = s.indexOf("-");
-            if (index == -1) return null;
-
-            Integer before = parseInt(s.substring(0, index));
-            if (before == null) return null;
-
-            Integer after = parseInt(s.substring(index + 1));
-            if (after == null) return null;
-
-            return IntStream.rangeClosed(before, after).mapToObj(Integer::toString).collect(Collectors.toList());
-        }
-    }
-
-    private static class CharacterRangeParser implements Function<String, Iterable<String>> {
-
-        private static List<String> getCharRange(char a, char b) {
-            List<String> s = new ArrayList<>();
-            for (char c = a; c <= b; c++) {
-                s.add(Character.toString(c));
-            }
-            return s;
-        }
-
-        @Override
-        public Iterable<String> apply(String s) {
-            int index = s.indexOf("-");
-            if (index == -1) return null;
-
-            String before = s.substring(0, index);
-            if (before.length() != 1) return null;
-
-            String after = s.substring(index + 1);
-            if (after.length() != 1) return null;
-
-            return getCharRange(before.charAt(0), after.charAt(0));
+        public final String next() {
+            return toString(this.next++);
         }
     }
 

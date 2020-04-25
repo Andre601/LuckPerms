@@ -27,7 +27,6 @@ package me.lucko.luckperms.sponge;
 
 import com.google.inject.Inject;
 
-import me.lucko.luckperms.api.platform.PlatformType;
 import me.lucko.luckperms.common.dependencies.classloader.PluginClassLoader;
 import me.lucko.luckperms.common.dependencies.classloader.ReflectionClassLoader;
 import me.lucko.luckperms.common.plugin.bootstrap.LuckPermsBootstrap;
@@ -39,6 +38,7 @@ import me.lucko.luckperms.common.util.MoreFiles;
 import org.slf4j.Logger;
 import org.spongepowered.api.Game;
 import org.spongepowered.api.Platform;
+import org.spongepowered.api.Server;
 import org.spongepowered.api.Sponge;
 import org.spongepowered.api.config.ConfigDir;
 import org.spongepowered.api.entity.living.player.Player;
@@ -58,6 +58,7 @@ import org.spongepowered.api.scheduler.SynchronousExecutor;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -72,7 +73,7 @@ import java.util.stream.Stream;
         version = "@version@",
         authors = "Luck",
         description = "A permissions plugin",
-        url = "https://luckperms.github.io",
+        url = "https://luckperms.net",
         dependencies = {
                 // explicit dependency on spongeapi with no defined API version
                 @Dependency(id = "spongeapi")
@@ -103,7 +104,7 @@ public class LPSpongeBootstrap implements LuckPermsBootstrap {
     /**
      * The time when the plugin was enabled
      */
-    private long startTime;
+    private Instant startTime;
 
     // load/enable latches
     private final CountDownLatch loadLatch = new CountDownLatch(1);
@@ -163,7 +164,7 @@ public class LPSpongeBootstrap implements LuckPermsBootstrap {
 
     @Listener(order = Order.FIRST)
     public void onEnable(GamePreInitializationEvent event) {
-        this.startTime = System.currentTimeMillis();
+        this.startTime = Instant.now();
         try {
             this.plugin.load();
         } finally {
@@ -203,6 +204,10 @@ public class LPSpongeBootstrap implements LuckPermsBootstrap {
         return this.game;
     }
 
+    public Optional<Server> getServer() {
+        return this.game.isServerAvailable() ? Optional.of(this.game.getServer()) : Optional.empty();
+    }
+
     public Scheduler getSpongeScheduler() {
         return this.spongeScheduler;
     }
@@ -219,26 +224,26 @@ public class LPSpongeBootstrap implements LuckPermsBootstrap {
     }
 
     @Override
-    public long getStartupTime() {
+    public Instant getStartupTime() {
         return this.startTime;
     }
 
     // provide information about the platform
 
     @Override
-    public PlatformType getType() {
-        return PlatformType.SPONGE;
+    public net.luckperms.api.platform.Platform.Type getType() {
+        return net.luckperms.api.platform.Platform.Type.SPONGE;
     }
 
     @Override
     public String getServerBrand() {
-        return getGame().getPlatform().getContainer(Platform.Component.IMPLEMENTATION).getName();
+        return this.game.getPlatform().getContainer(Platform.Component.IMPLEMENTATION).getName();
     }
 
     @Override
     public String getServerVersion() {
-        PluginContainer api = getGame().getPlatform().getContainer(Platform.Component.API);
-        PluginContainer impl = getGame().getPlatform().getContainer(Platform.Component.IMPLEMENTATION);
+        PluginContainer api = this.game.getPlatform().getContainer(Platform.Component.API);
+        PluginContainer impl = this.game.getPlatform().getContainer(Platform.Component.IMPLEMENTATION);
         return api.getName() + ": " + api.getVersion().orElse("null") + " - " + impl.getName() + ": " + impl.getVersion().orElse("null");
     }
     
@@ -264,56 +269,46 @@ public class LPSpongeBootstrap implements LuckPermsBootstrap {
     }
 
     @Override
-    public Optional<Player> getPlayer(UUID uuid) {
-        if (!getGame().isServerAvailable()) {
-            return Optional.empty();
-        }
-
-        return getGame().getServer().getPlayer(uuid);
+    public Optional<Player> getPlayer(UUID uniqueId) {
+        return getServer().flatMap(s -> s.getPlayer(uniqueId));
     }
 
     @Override
-    public Optional<UUID> lookupUuid(String username) {
-        if (!getGame().isServerAvailable()) {
-            return Optional.empty();
-        }
-
-        return getGame().getServer().getGameProfileManager().get(username)
+    public Optional<UUID> lookupUniqueId(String username) {
+        return getServer().flatMap(server -> server.getGameProfileManager().get(username)
                 .thenApply(p -> Optional.of(p.getUniqueId()))
                 .exceptionally(x -> Optional.empty())
-                .join();
+                .join()
+        );
     }
 
     @Override
-    public Optional<String> lookupUsername(UUID uuid) {
-        if (!getGame().isServerAvailable()) {
-            return Optional.empty();
-        }
-
-        return getGame().getServer().getGameProfileManager().get(uuid)
+    public Optional<String> lookupUsername(UUID uniqueId) {
+        return getServer().flatMap(server -> server.getGameProfileManager().get(uniqueId)
                 .thenApply(GameProfile::getName)
                 .exceptionally(x -> Optional.empty())
-                .join();
+                .join()
+        );
     }
 
     @Override
     public int getPlayerCount() {
-        return getGame().isServerAvailable() ? getGame().getServer().getOnlinePlayers().size() : 0;
+        return getServer().map(server -> server.getOnlinePlayers().size()).orElse(0);
     }
 
     @Override
     public Stream<String> getPlayerList() {
-        return getGame().isServerAvailable() ? getGame().getServer().getOnlinePlayers().stream().map(Player::getName) : Stream.empty();
+        return getServer().map(server -> server.getOnlinePlayers().stream().map(Player::getName)).orElseGet(Stream::empty);
     }
 
     @Override
     public Stream<UUID> getOnlinePlayers() {
-        return getGame().isServerAvailable() ? getGame().getServer().getOnlinePlayers().stream().map(Player::getUniqueId) : Stream.empty();
+        return getServer().map(server -> server.getOnlinePlayers().stream().map(Player::getUniqueId)).orElseGet(Stream::empty);
     }
 
     @Override
-    public boolean isPlayerOnline(UUID uuid) {
-        return getGame().isServerAvailable() ? getGame().getServer().getPlayer(uuid).map(Player::isOnline).orElse(false) : false;
+    public boolean isPlayerOnline(UUID uniqueId) {
+        return getServer().flatMap(server -> server.getPlayer(uniqueId).map(Player::isOnline)).orElse(false);
     }
     
 }

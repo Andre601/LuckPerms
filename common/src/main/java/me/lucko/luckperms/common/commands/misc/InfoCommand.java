@@ -25,7 +25,6 @@
 
 package me.lucko.luckperms.common.commands.misc;
 
-import me.lucko.luckperms.api.context.ImmutableContextSet;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.SingleCommand;
 import me.lucko.luckperms.common.command.access.CommandPermission;
@@ -39,6 +38,12 @@ import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.util.DurationFormatter;
 import me.lucko.luckperms.common.util.Predicates;
 
+import net.luckperms.api.context.ImmutableContextSet;
+import net.luckperms.api.extension.Extension;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -63,13 +68,21 @@ public class InfoCommand extends SingleCommand {
             Message.INFO_STORAGE_META.send(sender, e.getKey(), formatValue(e.getValue()));
         }
 
+        Collection<Extension> loadedExtensions = plugin.getExtensionManager().getLoadedExtensions();
+        if (!loadedExtensions.isEmpty()) {
+            Message.INFO_EXTENSIONS.send(sender);
+            for (Extension extension : loadedExtensions) {
+                Message.INFO_EXTENSION_ENTRY.send(sender, extension.getClass().getName());
+            }
+        }
+
         ImmutableContextSet staticContext = plugin.getContextManager().getStaticContext();
         Message.INFO_MIDDLE.send(sender,
                 plugin.getMessagingService().map(InternalMessagingService::getName).orElse("None"),
                 staticContext.isEmpty() ? "None" : MessageUtils.contextSetToString(plugin.getLocaleManager(), staticContext),
                 plugin.getBootstrap().getPlayerCount(),
                 plugin.getConnectionListener().getUniqueConnections().size(),
-                DurationFormatter.CONCISE_LOW_ACCURACY.format((System.currentTimeMillis() - plugin.getBootstrap().getStartupTime()) / 1000L),
+                DurationFormatter.CONCISE_LOW_ACCURACY.format(Duration.between(plugin.getBootstrap().getStartupTime(), Instant.now())),
                 plugin.getUserManager().getAll().size(),
                 plugin.getGroupManager().getAll().size(),
                 plugin.getTrackManager().getAll().size()

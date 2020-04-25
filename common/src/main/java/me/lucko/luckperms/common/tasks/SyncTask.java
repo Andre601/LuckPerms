@@ -25,12 +25,12 @@
 
 package me.lucko.luckperms.common.tasks;
 
-import me.lucko.luckperms.api.event.cause.CreationCause;
 import me.lucko.luckperms.common.cache.BufferedRequest;
-import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.model.manager.group.GroupManager;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 
-import java.util.concurrent.CompletableFuture;
+import net.luckperms.api.event.cause.CreationCause;
+
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -41,14 +41,8 @@ import java.util.concurrent.TimeUnit;
 public class SyncTask implements Runnable {
     private final LuckPermsPlugin plugin;
 
-    /**
-     * If this task is being called before the server has fully started
-     */
-    private final boolean initialUpdate;
-
-    public SyncTask(LuckPermsPlugin plugin, boolean initialUpdate) {
+    public SyncTask(LuckPermsPlugin plugin) {
         this.plugin = plugin;
-        this.initialUpdate = initialUpdate;
     }
 
     /**
@@ -58,28 +52,29 @@ public class SyncTask implements Runnable {
      */
     @Override
     public void run() {
-        if (this.plugin.getEventFactory().handlePreSync(false)) {
+        if (this.plugin.getEventDispatcher().dispatchPreSync(false)) {
             return;
         }
 
         // Reload all groups
         this.plugin.getStorage().loadAllGroups().join();
-        if (!this.plugin.getGroupManager().isLoaded(NodeFactory.DEFAULT_GROUP_NAME)) {
-            this.plugin.getStorage().createAndLoadGroup(NodeFactory.DEFAULT_GROUP_NAME, CreationCause.INTERNAL).join();
+        if (!this.plugin.getGroupManager().isLoaded(GroupManager.DEFAULT_GROUP_NAME)) {
+            this.plugin.getStorage().createAndLoadGroup(GroupManager.DEFAULT_GROUP_NAME, CreationCause.INTERNAL).join();
         }
 
         // Reload all tracks
         this.plugin.getStorage().loadAllTracks().join();
 
-        // Refresh all online users.
-        CompletableFuture<Void> userUpdateFut = this.plugin.getUserManager().updateAllUsers();
-        if (!this.initialUpdate) {
-            userUpdateFut.join();
-        }
+        // Reload all online users.
+        this.plugin.getUserManager().loadAllUsers().join();
 
         this.plugin.performPlatformDataSync();
 
-        this.plugin.getEventFactory().handlePostSync();
+        // Just to be sure...
+        this.plugin.getGroupManager().invalidateAllGroupCaches();
+        this.plugin.getUserManager().invalidateAllUserCaches();
+
+        this.plugin.getEventDispatcher().dispatchPostSync();
     }
 
     public static class Buffer extends BufferedRequest<Void> {
@@ -92,7 +87,7 @@ public class SyncTask implements Runnable {
 
         @Override
         protected Void perform() {
-            new SyncTask(this.plugin, false).run();
+            new SyncTask(this.plugin).run();
             return null;
         }
     }

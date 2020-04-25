@@ -73,8 +73,12 @@ public class BungeeSchedulerAdapter implements SchedulerAdapter {
     }
 
     @Override
-    public void shutdown() {
-        Iterators.iterate(this.tasks, ScheduledTask::cancel);
+    public void shutdownScheduler() {
+        Iterators.tryIterate(this.tasks, ScheduledTask::cancel);
     }
 
+    @Override
+    public void shutdownExecutor() {
+        // do nothing
+    }
 }

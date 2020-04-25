@@ -25,7 +25,6 @@
 
 package me.lucko.luckperms.bungee;
 
-import me.lucko.luckperms.api.platform.PlatformType;
 import me.lucko.luckperms.bungee.util.RedisBungeeUtil;
 import me.lucko.luckperms.common.dependencies.classloader.PluginClassLoader;
 import me.lucko.luckperms.common.dependencies.classloader.ReflectionClassLoader;
@@ -34,11 +33,13 @@ import me.lucko.luckperms.common.plugin.logging.JavaPluginLogger;
 import me.lucko.luckperms.common.plugin.logging.PluginLogger;
 import me.lucko.luckperms.common.plugin.scheduler.SchedulerAdapter;
 
+import net.luckperms.api.platform.Platform;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.plugin.Plugin;
 
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -72,7 +73,7 @@ public class LPBungeeBootstrap extends Plugin implements LuckPermsBootstrap {
     /**
      * The time when the plugin was enabled
      */
-    private long startTime;
+    private Instant startTime;
 
     // load/enable latches
     private final CountDownLatch loadLatch = new CountDownLatch(1);
@@ -119,7 +120,7 @@ public class LPBungeeBootstrap extends Plugin implements LuckPermsBootstrap {
 
     @Override
     public void onEnable() {
-        this.startTime = System.currentTimeMillis();
+        this.startTime = Instant.now();
         try {
             this.plugin.enable();
         } finally {
@@ -150,15 +151,15 @@ public class LPBungeeBootstrap extends Plugin implements LuckPermsBootstrap {
     }
 
     @Override
-    public long getStartupTime() {
+    public Instant getStartupTime() {
         return this.startTime;
     }
 
     // provide information about the platform
 
     @Override
-    public PlatformType getType() {
-        return PlatformType.BUNGEE;
+    public Platform.Type getType() {
+        return Platform.Type.BUNGEECORD;
     }
 
     @Override
@@ -182,12 +183,12 @@ public class LPBungeeBootstrap extends Plugin implements LuckPermsBootstrap {
     }
 
     @Override
-    public Optional<ProxiedPlayer> getPlayer(UUID uuid) {
-        return Optional.ofNullable(getProxy().getPlayer(uuid));
+    public Optional<ProxiedPlayer> getPlayer(UUID uniqueId) {
+        return Optional.ofNullable(getProxy().getPlayer(uniqueId));
     }
 
     @Override
-    public Optional<UUID> lookupUuid(String username) {
+    public Optional<UUID> lookupUniqueId(String username) {
         if (getProxy().getPluginManager().getPlugin("RedisBungee") != null) {
             try {
                 return RedisBungeeUtil.lookupUuid(username);
@@ -200,10 +201,10 @@ public class LPBungeeBootstrap extends Plugin implements LuckPermsBootstrap {
     }
 
     @Override
-    public Optional<String> lookupUsername(UUID uuid) {
+    public Optional<String> lookupUsername(UUID uniqueId) {
         if (getProxy().getPluginManager().getPlugin("RedisBungee") != null) {
             try {
-                return RedisBungeeUtil.lookupUsername(uuid);
+                return RedisBungeeUtil.lookupUsername(uniqueId);
             } catch (Throwable t) {
                 t.printStackTrace();
             }
@@ -228,8 +229,8 @@ public class LPBungeeBootstrap extends Plugin implements LuckPermsBootstrap {
     }
 
     @Override
-    public boolean isPlayerOnline(UUID uuid) {
-        ProxiedPlayer player = getProxy().getPlayer(uuid);
+    public boolean isPlayerOnline(UUID uniqueId) {
+        ProxiedPlayer player = getProxy().getPlayer(uniqueId);
         return player != null && player.isConnected();
     }
 }

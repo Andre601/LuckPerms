@@ -30,18 +30,18 @@ import com.google.common.collect.ImmutableList;
 import me.lucko.luckperms.common.command.abstraction.Command;
 import me.lucko.luckperms.common.command.abstraction.CommandException;
 import me.lucko.luckperms.common.command.access.CommandPermission;
+import me.lucko.luckperms.common.command.tabcomplete.CompletionSupplier;
+import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompletions;
-import me.lucko.luckperms.common.command.utils.ArgumentParser;
 import me.lucko.luckperms.common.commands.group.CreateGroup;
 import me.lucko.luckperms.common.commands.group.DeleteGroup;
-import me.lucko.luckperms.common.commands.group.GroupMainCommand;
+import me.lucko.luckperms.common.commands.group.GroupParentCommand;
 import me.lucko.luckperms.common.commands.group.ListGroups;
-import me.lucko.luckperms.common.commands.log.LogMainCommand;
-import me.lucko.luckperms.common.commands.migration.MigrationMainCommand;
+import me.lucko.luckperms.common.commands.log.LogParentCommand;
+import me.lucko.luckperms.common.commands.migration.MigrationParentCommand;
 import me.lucko.luckperms.common.commands.misc.ApplyEditsCommand;
 import me.lucko.luckperms.common.commands.misc.BulkUpdateCommand;
 import me.lucko.luckperms.common.commands.misc.CheckCommand;
-import me.lucko.luckperms.common.commands.misc.DebugCommand;
 import me.lucko.luckperms.common.commands.misc.EditorCommand;
 import me.lucko.luckperms.common.commands.misc.ExportCommand;
 import me.lucko.luckperms.common.commands.misc.ImportCommand;
@@ -55,37 +55,34 @@ import me.lucko.luckperms.common.commands.misc.VerboseCommand;
 import me.lucko.luckperms.common.commands.track.CreateTrack;
 import me.lucko.luckperms.common.commands.track.DeleteTrack;
 import me.lucko.luckperms.common.commands.track.ListTracks;
-import me.lucko.luckperms.common.commands.track.TrackMainCommand;
-import me.lucko.luckperms.common.commands.user.UserMainCommand;
+import me.lucko.luckperms.common.commands.track.TrackParentCommand;
+import me.lucko.luckperms.common.commands.user.UserParentCommand;
 import me.lucko.luckperms.common.locale.LocaleManager;
 import me.lucko.luckperms.common.locale.message.Message;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
+import me.lucko.luckperms.common.util.ImmutableCollectors;
 import me.lucko.luckperms.common.util.TextUtils;
 
 import net.kyori.text.TextComponent;
 import net.kyori.text.event.ClickEvent;
 import net.kyori.text.event.HoverEvent;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.ListIterator;
-import java.util.Optional;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.regex.Pattern;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * Root command manager for the '/luckperms' command.
+ */
 public class CommandManager {
-    public static final Pattern COMMAND_SEPARATOR_PATTERN = Pattern.compile(" (?=([^\\\"]*\\\"[^\\\"]*\\\")*[^\\\"]*$)");
-
-    public static final char SECTION_CHAR = '\u00A7'; // §
-    public static final char AMPERSAND_CHAR = '&';
 
     private final LuckPermsPlugin plugin;
 
@@ -94,23 +91,22 @@ public class CommandManager {
 
     private final TabCompletions tabCompletions;
 
-    private final List<Command<?, ?>> mainCommands;
+    private final Map<String, Command<?>> mainCommands;
 
     public CommandManager(LuckPermsPlugin plugin) {
         this.plugin = plugin;
         LocaleManager locale = plugin.getLocaleManager();
 
         this.tabCompletions = new TabCompletions(plugin);
-        this.mainCommands = ImmutableList.<Command<?, ?>>builder()
-                .add(new UserMainCommand(locale))
-                .add(new GroupMainCommand(locale))
-                .add(new TrackMainCommand(locale))
+        this.mainCommands = ImmutableList.<Command<?>>builder()
+                .add(new UserParentCommand(locale))
+                .add(new GroupParentCommand(locale))
+                .add(new TrackParentCommand(locale))
                 .addAll(plugin.getExtraCommands())
-                .add(new LogMainCommand(locale))
+                .add(new LogParentCommand(locale))
                 .add(new SyncCommand(locale))
                 .add(new InfoCommand(locale))
                 .add(new EditorCommand(locale))
-                .add(new DebugCommand(locale))
                 .add(new VerboseCommand(locale))
                 .add(new TreeCommand(locale))
                 .add(new SearchCommand(locale))
@@ -120,7 +116,7 @@ public class CommandManager {
                 .add(new ExportCommand(locale))
                 .add(new ReloadConfigCommand(locale))
                 .add(new BulkUpdateCommand(locale))
-                .add(new MigrationMainCommand(locale))
+                .add(new MigrationParentCommand(locale))
                 .add(new ApplyEditsCommand(locale))
                 .add(new CreateGroup(locale))
                 .add(new DeleteGroup(locale))
@@ -128,7 +124,9 @@ public class CommandManager {
                 .add(new CreateTrack(locale))
                 .add(new DeleteTrack(locale))
                 .add(new ListTracks(locale))
-                .build();
+                .build()
+                .stream()
+                .collect(ImmutableCollectors.toMap(c -> c.getName().toLowerCase(), Function.identity()));
     }
 
     public LuckPermsPlugin getPlugin() {
@@ -139,11 +137,7 @@ public class CommandManager {
         return this.tabCompletions;
     }
 
-    public CompletableFuture<CommandResult> onCommand(Sender sender, String label, List<String> args) {
-        return onCommand(sender, label, args, this.executor);
-    }
-
-    public CompletableFuture<CommandResult> onCommand(Sender sender, String label, List<String> args, Executor executor) {
+    public CompletableFuture<CommandResult> executeCommand(Sender sender, String label, List<String> args) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 return execute(sender, label, args);
@@ -152,16 +146,14 @@ public class CommandManager {
                 e.printStackTrace();
                 return null;
             }
-        }, executor);
+        }, this.executor);
     }
 
     public boolean hasPermissionForAny(Sender sender) {
-        return this.mainCommands.stream().anyMatch(c -> c.shouldDisplay() && c.isAuthorized(sender));
+        return this.mainCommands.values().stream().anyMatch(c -> c.shouldDisplay() && c.isAuthorized(sender));
     }
 
-    @SuppressWarnings("unchecked")
-    private CommandResult execute(Sender sender, String label, List<String> args) {
-        List<String> arguments = new ArrayList<>(args);
+    private CommandResult execute(Sender sender, String label, List<String> arguments) {
         handleRewrites(arguments, true);
 
         // Handle no arguments
@@ -170,31 +162,27 @@ public class CommandManager {
             if (hasPermissionForAny(sender)) {
                 Message.VIEW_AVAILABLE_COMMANDS_PROMPT.send(sender, label);
                 return CommandResult.SUCCESS;
-            } else {
-                Collection<? extends Group> groups = this.plugin.getGroupManager().getAll().values();
-                if (groups.size() <= 1 && groups.stream().allMatch(g -> g.getOwnNodes().isEmpty())) {
-                    Message.FIRST_TIME_SETUP.send(sender, label, sender.getName());
-                } else {
-                    Message.NO_PERMISSION_FOR_SUBCOMMANDS.send(sender);
-                }
-                return CommandResult.NO_PERMISSION;
             }
+
+            Collection<? extends Group> groups = this.plugin.getGroupManager().getAll().values();
+            if (groups.size() <= 1 && groups.stream().allMatch(g -> g.normalData().immutable().isEmpty())) {
+                Message.FIRST_TIME_SETUP.send(sender, label, sender.getName());
+            } else {
+                Message.NO_PERMISSION_FOR_SUBCOMMANDS.send(sender);
+            }
+            return CommandResult.NO_PERMISSION;
         }
 
         // Look for the main command.
-        Optional<Command<?, ?>> o = this.mainCommands.stream()
-                .filter(m -> m.getName().equalsIgnoreCase(arguments.get(0)))
-                .limit(1)
-                .findAny();
+        Command<?> main = this.mainCommands.get(arguments.get(0).toLowerCase());
 
         // Main command not found
-        if (!o.isPresent()) {
+        if (main == null) {
             sendCommandUsage(sender, label);
             return CommandResult.INVALID_ARGS;
         }
 
         // Check the Sender has permission to use the main command.
-        final Command main = o.get();
         if (!main.isAuthorized(sender)) {
             sendCommandUsage(sender, label);
             return CommandResult.NO_PERMISSION;
@@ -213,7 +201,7 @@ public class CommandManager {
         try {
             result = main.execute(this.plugin, sender, null, arguments, label);
         } catch (CommandException e) {
-            result = handleException(e, sender, label, main);
+            result = e.handle(sender, label, main);
         } catch (Throwable e) {
             e.printStackTrace();
             result = CommandResult.FAILURE;
@@ -222,62 +210,35 @@ public class CommandManager {
         return result;
     }
 
-    /**
-     * Generic tab complete method to be called from the command executor object of the platform
-     *
-     * @param sender who is tab completing
-     * @param args   the arguments provided so far
-     * @return a list of suggestions
-     */
-    @SuppressWarnings("unchecked")
-    public List<String> onTabComplete(Sender sender, List<String> args) {
-        List<String> arguments = new ArrayList<>(args);
-
+    public List<String> tabCompleteCommand(Sender sender, List<String> arguments) {
         // we rewrite tab completions too!
         handleRewrites(arguments, false);
 
-        final List<Command> mains = this.mainCommands.stream()
+        final List<Command<?>> mains = this.mainCommands.values().stream()
                 .filter(Command::shouldDisplay)
                 .filter(m -> m.isAuthorized(sender))
                 .collect(Collectors.toList());
 
-        // Not yet past the point of entering a main command
-        if (arguments.size() <= 1) {
-
-            // Nothing yet entered
-            if (arguments.isEmpty() || arguments.get(0).equals("")) {
-                return mains.stream()
-                        .map(m -> m.getName().toLowerCase())
-                        .collect(Collectors.toList());
-            }
-
-            // Started typing a main command
-            return mains.stream()
-                    .map(m -> m.getName().toLowerCase())
-                    .filter(s -> s.startsWith(arguments.get(0).toLowerCase()))
-                    .collect(Collectors.toList());
-        }
-
-        // Find a main command matching the first arg
-        Optional<Command> o = mains.stream()
-                .filter(m -> m.getName().equalsIgnoreCase(arguments.get(0)))
-                .findFirst();
-
-        arguments.remove(0); // remove the main command arg.
-
-        // Pass the processing onto the main command
-        return o.map(cmd -> cmd.tabComplete(this.plugin, sender, arguments)).orElseGet(Collections::emptyList);
+        return TabCompleter.create()
+                .at(0, CompletionSupplier.startsWith(() -> mains.stream().map(c -> c.getName().toLowerCase())))
+                .from(1, partial -> mains.stream()
+                        .filter(m -> m.getName().equalsIgnoreCase(arguments.get(0)))
+                        .findFirst()
+                        .map(cmd -> cmd.tabComplete(this.plugin, sender, arguments.subList(1, arguments.size())))
+                        .orElse(Collections.emptyList())
+                )
+                .complete(arguments);
     }
 
     private void sendCommandUsage(Sender sender, String label) {
         Message.BLANK.send(sender, "&2Running &bLuckPerms v" + this.plugin.getBootstrap().getVersion() + "&2.");
-        this.mainCommands.stream()
+        this.mainCommands.values().stream()
                 .filter(Command::shouldDisplay)
                 .filter(c -> c.isAuthorized(sender))
                 .forEach(c -> {
                     String permission = c.getPermission().map(CommandPermission::getPermission).orElse("None");
 
-                    TextComponent component = TextUtils.fromLegacy("&3> &a" + String.format(c.getUsage(), label), AMPERSAND_CHAR)
+                    TextComponent component = TextUtils.fromLegacy("&3> &a" + String.format(c.getUsage(), label), TextUtils.AMPERSAND_CHAR)
                             .toBuilder().applyDeep(comp -> {
                                 comp.hoverEvent(HoverEvent.showText(TextUtils.fromLegacy(TextUtils.joinNewline(
                                         "&bCommand: &2" + c.getName(),
@@ -286,44 +247,11 @@ public class CommandManager {
                                         "&bPermission: &2" + permission,
                                         " ",
                                         "&7Click to auto-complete."
-                                ), AMPERSAND_CHAR)));
+                                ), TextUtils.AMPERSAND_CHAR)));
                                 comp.clickEvent(ClickEvent.suggestCommand(String.format(c.getUsage(), label)));
                             }).build();
                     sender.sendMessage(component);
                 });
-    }
-
-    public static CommandResult handleException(CommandException e, Sender sender, String label, Command command) {
-        if (e instanceof ArgumentParser.ArgumentException) {
-            if (e instanceof ArgumentParser.DetailedUsageException) {
-                command.sendDetailedUsage(sender, label);
-                return CommandResult.INVALID_ARGS;
-            }
-
-            if (e instanceof ArgumentParser.InvalidServerWorldException) {
-                Message.SERVER_WORLD_INVALID_ENTRY.send(sender);
-                return CommandResult.INVALID_ARGS;
-            }
-
-            if (e instanceof ArgumentParser.PastDateException) {
-                Message.PAST_DATE_ERROR.send(sender);
-                return CommandResult.INVALID_ARGS;
-            }
-
-            if (e instanceof ArgumentParser.InvalidDateException) {
-                Message.ILLEGAL_DATE_ERROR.send(sender, ((ArgumentParser.InvalidDateException) e).getInvalidDate());
-                return CommandResult.INVALID_ARGS;
-            }
-
-            if (e instanceof ArgumentParser.InvalidPriorityException) {
-                Message.META_INVALID_PRIORITY.send(sender, ((ArgumentParser.InvalidPriorityException) e).getInvalidPriority());
-                return CommandResult.INVALID_ARGS;
-            }
-        }
-
-        // Not something we can catch.
-        e.printStackTrace();
-        return CommandResult.FAILURE;
     }
 
     /**
@@ -336,7 +264,7 @@ public class CommandManager {
         // Provide aliases
         if (args.size() >= 1 && (rewriteLastArgument || args.size() >= 2)) {
             String arg0 = args.get(0);
-            if (arg0.equalsIgnoreCase("u") || arg0.equalsIgnoreCase("player") || arg0.equalsIgnoreCase("p")) {
+            if (arg0.equalsIgnoreCase("u")) {
                 args.remove(0);
                 args.add(0, "user");
             } else if (arg0.equalsIgnoreCase("g")) {
@@ -361,166 +289,37 @@ public class CommandManager {
                 // Provide aliases
                 case "p":
                 case "perm":
-                case "perms":
                     args.remove(2);
                     args.add(2, "permission");
                     break;
-                case "chat":
                 case "m":
                     args.remove(2);
                     args.add(2, "meta");
                     break;
                 case "i":
-                case "about":
-                case "list":
                     args.remove(2);
                     args.add(2, "info");
-                    break;
-                case "inherit":
-                case "inheritances":
-                case "group":
-                case "groups":
-                case "g":
-                case "rank":
-                case "ranks":
-                case "parents":
-                    args.remove(2);
-                    args.add(2, "parent");
                     break;
                 case "e":
                     args.remove(2);
                     args.add(2, "editor");
                     break;
-
-                // Provide backwards compatibility
-                case "setprimarygroup":
-                case "switchprimarygroup":
-                    args.remove(2);
-                    args.add(2, "parent");
-                    args.add(3, "switchprimarygroup");
-                    break;
-                case "listnodes":
-                    args.remove(2);
-                    args.add(2, "permission");
-                    args.add(3, "info");
-                    break;
-                case "set":
-                case "unset":
-                case "settemp":
-                case "unsettemp":
-                    args.add(2, "permission");
-                    break;
-                case "haspermission":
-                    args.remove(2);
-                    args.add(2, "permission");
-                    args.add(3, "check");
-                    break;
-                case "inheritspermission":
-                    args.remove(2);
-                    args.add(2, "permission");
-                    args.add(3, "checkinherits");
-                    break;
-                case "listgroups":
-                    args.remove(2);
-                    args.add(2, "parent");
-                    args.add(3, "info");
-                    break;
-                case "addgroup":
-                case "setinherit":
-                    args.remove(2);
-                    args.add(2, "parent");
-                    args.add(3, "add");
-                    break;
-                case "setgroup":
-                    args.remove(2);
-                    args.add(2, "parent");
-                    args.add(3, "set");
-                    break;
-                case "removegroup":
-                case "unsetinherit":
-                    args.remove(2);
-                    args.add(2, "parent");
-                    args.add(3, "remove");
-                    break;
-                case "addtempgroup":
-                case "settempinherit":
-                    args.remove(2);
-                    args.add(2, "parent");
-                    args.add(3, "addtemp");
-                    break;
-                case "removetempgroup":
-                case "unsettempinherit":
-                    args.remove(2);
-                    args.add(2, "parent");
-                    args.add(3, "removetemp");
-                    break;
-                case "chatmeta":
-                    args.remove(2);
-                    args.add(2, "meta");
-                    args.add(3, "info");
-                    break;
-                case "addprefix":
-                case "addsuffix":
-                case "removeprefix":
-                case "removesuffix":
-                case "addtempprefix":
-                case "addtempsuffix":
-                case "removetempprefix":
-                case "removetempsuffix":
-                    args.add(2, "meta");
-                    break;
                 default:
                     break;
             }
 
-            // provide lazy info
+            // /lp user Luck permission i ==> /lp user Luck permission info
             boolean lazyInfo = (
                     args.size() >= 4 && (rewriteLastArgument || args.size() >= 5) &&
                     (args.get(2).equalsIgnoreCase("permission") || args.get(2).equalsIgnoreCase("parent") || args.get(2).equalsIgnoreCase("meta")) &&
-                    (args.get(3).equalsIgnoreCase("i") || args.get(3).equalsIgnoreCase("about") || args.get(3).equalsIgnoreCase("list"))
+                    (args.get(3).equalsIgnoreCase("i"))
             );
 
             if (lazyInfo) {
                 args.remove(3);
                 args.add(3, "info");
             }
-
-            // Provide lazy set rewrite
-            boolean lazySet = (
-                    args.size() >= 6 && (rewriteLastArgument || args.size() >= 7) &&
-                    args.get(2).equalsIgnoreCase("permission") &&
-                    args.get(3).toLowerCase().startsWith("set") &&
-                    (args.get(5).equalsIgnoreCase("none") || args.get(5).equalsIgnoreCase("0"))
-            );
-
-            if (lazySet) {
-                args.remove(5);
-                args.remove(3);
-                args.add(3, "unset");
-            }
         }
-    }
-
-    /**
-     * Strips outer quote marks from a list of parsed arguments.
-     *
-     * @param input the list of arguments to strip quotes from
-     * @return an ArrayList containing the contents of input without quotes
-     */
-    public static List<String> stripQuotes(List<String> input) {
-        input = new ArrayList<>(input);
-        ListIterator<String> iterator = input.listIterator();
-        while (iterator.hasNext()) {
-            String value = iterator.next();
-            if (value.length() < 3) {
-                continue;
-            }
-
-            if (value.charAt(0) == '"' && value.charAt(value.length() - 1) == '"') {
-                iterator.set(value.substring(1, value.length() - 1));
-            }
-        }
-        return input;
     }
 
 }

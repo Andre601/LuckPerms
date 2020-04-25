@@ -25,11 +25,10 @@
 
 package me.lucko.luckperms.common.commands.group;
 
-import me.lucko.luckperms.api.nodetype.types.WeightType;
-import me.lucko.luckperms.common.actionlog.ExtendedLogEntry;
+import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.command.CommandResult;
+import me.lucko.luckperms.common.command.abstraction.ChildCommand;
 import me.lucko.luckperms.common.command.abstraction.CommandException;
-import me.lucko.luckperms.common.command.abstraction.SubCommand;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
 import me.lucko.luckperms.common.command.utils.ArgumentParser;
@@ -38,14 +37,17 @@ import me.lucko.luckperms.common.locale.LocaleManager;
 import me.lucko.luckperms.common.locale.command.CommandSpec;
 import me.lucko.luckperms.common.locale.message.Message;
 import me.lucko.luckperms.common.model.Group;
-import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.node.types.Weight;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.util.Predicates;
 
+import net.luckperms.api.model.data.DataType;
+import net.luckperms.api.node.NodeType;
+
 import java.util.List;
 
-public class GroupSetWeight extends SubCommand<Group> {
+public class GroupSetWeight extends ChildCommand<Group> {
     public GroupSetWeight(LocaleManager locale) {
         super(CommandSpec.GROUP_SETWEIGHT.localize(locale), "setweight", CommandPermission.GROUP_SET_WEIGHT, Predicates.not(1));
     }
@@ -59,13 +61,13 @@ public class GroupSetWeight extends SubCommand<Group> {
 
         int weight = ArgumentParser.parsePriority(0, args);
 
-        group.removeIf(n -> n.getTypeData(WeightType.KEY).isPresent());
-        group.setPermission(NodeFactory.buildWeightNode(weight).build());
+        group.removeIf(DataType.NORMAL, null, NodeType.WEIGHT::matches, false);
+        group.setNode(DataType.NORMAL, Weight.builder(weight).build(), true);
 
         Message.GROUP_SET_WEIGHT.send(sender, weight, group.getFormattedDisplayName());
 
-        ExtendedLogEntry.build().actor(sender).acted(group)
-                .action("setweight", weight)
+        LoggedAction.build().source(sender).target(group)
+                .description("setweight", weight)
                 .build().submit(plugin, sender);
 
         StorageAssistant.save(group, sender, plugin);

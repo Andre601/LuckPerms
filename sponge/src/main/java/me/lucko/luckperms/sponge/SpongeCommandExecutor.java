@@ -25,9 +25,9 @@
 
 package me.lucko.luckperms.sponge;
 
-import com.google.common.base.Splitter;
-
 import me.lucko.luckperms.common.command.CommandManager;
+import me.lucko.luckperms.common.command.utils.ArgumentTokenizer;
+import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.sender.Sender;
 
 import org.checkerframework.checker.nullness.qual.NonNull;
@@ -44,11 +44,9 @@ import org.spongepowered.api.world.World;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class SpongeCommandExecutor extends CommandManager implements CommandCallable {
-    private static final Splitter TAB_COMPLETE_ARGUMENT_SPLITTER = Splitter.on(COMMAND_SEPARATOR_PATTERN);
-    private static final Splitter ARGUMENT_SPLITTER = Splitter.on(COMMAND_SEPARATOR_PATTERN).omitEmptyStrings();
-
     private final LPSpongePlugin plugin;
 
     public SpongeCommandExecutor(LPSpongePlugin plugin) {
@@ -57,20 +55,18 @@ public class SpongeCommandExecutor extends CommandManager implements CommandCall
     }
 
     @Override
-    public @NonNull CommandResult process(@NonNull CommandSource source, @NonNull String s) {
-        Sender lpSender = this.plugin.getSenderFactory().wrap(source);
-        List<String> arguments = processSelectors(source, CommandManager.stripQuotes(ARGUMENT_SPLITTER.splitToList(s)));
-
-        onCommand(lpSender, "lp", arguments);
+    public @NonNull CommandResult process(@NonNull CommandSource source, @NonNull String args) {
+        Sender wrapped = this.plugin.getSenderFactory().wrap(source);
+        List<String> arguments = resolveSelectors(source, ArgumentTokenizer.EXECUTE.tokenizeInput(args));
+        executeCommand(wrapped, "lp", arguments);
         return CommandResult.success();
     }
 
     @Override
-    public @NonNull List<String> getSuggestions(@NonNull CommandSource source, @NonNull String s, @Nullable Location<World> location) {
-        Sender lpSender = this.plugin.getSenderFactory().wrap(source);
-        List<String> arguments = processSelectors(source, CommandManager.stripQuotes(TAB_COMPLETE_ARGUMENT_SPLITTER.splitToList(s)));
-
-        return onTabComplete(lpSender, arguments);
+    public @NonNull List<String> getSuggestions(@NonNull CommandSource source, @NonNull String args, @Nullable Location<World> location) {
+        Sender wrapped = this.plugin.getSenderFactory().wrap(source);
+        List<String> arguments = resolveSelectors(source, ArgumentTokenizer.TAB_COMPLETE.tokenizeInput(args));
+        return tabCompleteCommand(wrapped, arguments);
     }
 
     @Override
@@ -93,22 +89,43 @@ public class SpongeCommandExecutor extends CommandManager implements CommandCall
         return Text.of("/luckperms");
     }
 
-    private List<String> processSelectors(CommandSource source, List<String> args) {
-        ListIterator<String> it = args.listIterator();
-        while (it.hasNext()) {
-            String element = it.next();
-            if (element.startsWith("@")) {
-                try {
-                    Selector.parse(element).resolve(source).stream()
-                            .filter(e -> e instanceof Player)
-                            .map(e -> ((Player) e))
-                            .findFirst()
-                            .ifPresent(ret -> it.set(ret.getUniqueId().toString()));
-                } catch (IllegalArgumentException e) {
-                    // ignored
-                }
-            }
+    private List<String> resolveSelectors(CommandSource source, List<String> args) {
+        if (!this.plugin.getConfiguration().get(ConfigKeys.RESOLVE_COMMAND_SELECTORS)) {
+            return args;
         }
+
+        for (ListIterator<String> it = args.listIterator(); it.hasNext(); ) {
+            String arg = it.next();
+            if (arg.isEmpty() || arg.charAt(0) != '@') {
+                continue;
+            }
+
+            List<Player> matchedPlayers;
+            try {
+                matchedPlayers = Selector.parse(arg).resolve(source).stream()
+                        .filter(e -> e instanceof Player)
+                        .map(e -> ((Player) e))
+                        .collect(Collectors.toList());
+            } catch (IllegalArgumentException e) {
+                this.plugin.getLogger().warn("Error parsing selector '" + arg + "' for " + source + " executing " + args);
+                e.printStackTrace();
+                continue;
+            }
+
+            if (matchedPlayers.isEmpty()) {
+                continue;
+            }
+
+            if (matchedPlayers.size() > 1) {
+                this.plugin.getLogger().warn("Error parsing selector '" + arg + "' for " + source + " executing " + args +
+                        ": ambiguous result (more than one player matched) - " + matchedPlayers);
+                continue;
+            }
+
+            Player player = matchedPlayers.get(0);
+            it.set(player.getUniqueId().toString());
+        }
+
         return args;
     }
 

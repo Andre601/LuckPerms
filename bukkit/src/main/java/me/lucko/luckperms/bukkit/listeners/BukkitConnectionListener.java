@@ -26,7 +26,7 @@
 package me.lucko.luckperms.bukkit.listeners;
 
 import me.lucko.luckperms.bukkit.LPBukkitPlugin;
-import me.lucko.luckperms.bukkit.inject.permissible.LPPermissible;
+import me.lucko.luckperms.bukkit.inject.permissible.LuckPermsPermissible;
 import me.lucko.luckperms.bukkit.inject.permissible.PermissibleInjector;
 import me.lucko.luckperms.common.config.ConfigKeys;
 import me.lucko.luckperms.common.locale.message.Message;
@@ -81,7 +81,8 @@ public class BukkitConnectionListener extends AbstractConnectionListener impleme
     @EventHandler(priority = EventPriority.LOW)
     public void onPlayerPreLogin(AsyncPlayerPreLoginEvent e) {
         /* Called when the player first attempts a connection with the server.
-           Listening on LOW priority to allow plugins to modify username / UUID data here. (auth plugins) */
+           Listening on LOW priority to allow plugins to modify username / UUID data here. (auth plugins)
+           Also, give other plugins a chance to cancel the event. */
 
         /* wait for the plugin to enable. because these events are fired async, they can be called before
            the plugin has enabled.  */
@@ -93,6 +94,13 @@ public class BukkitConnectionListener extends AbstractConnectionListener impleme
 
         if (this.plugin.getConfiguration().get(ConfigKeys.DEBUG_LOGINS)) {
             this.plugin.getLogger().info("Processing pre-login for " + e.getUniqueId() + " - " + e.getName());
+        }
+
+        if (e.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) {
+            // another plugin has disallowed the login.
+            this.plugin.getLogger().info("Another plugin has cancelled the connection for " + e.getUniqueId() + " - " + e.getName() + ". No permissions data will be loaded.");
+            this.deniedAsyncLogin.add(e.getUniqueId());
+            return;
         }
 
         /* Actually process the login for the connection.
@@ -107,7 +115,7 @@ public class BukkitConnectionListener extends AbstractConnectionListener impleme
         try {
             User user = loadUser(e.getUniqueId(), e.getName());
             recordConnection(e.getUniqueId());
-            this.plugin.getEventFactory().handlePlayerLoginProcess(e.getUniqueId(), e.getName(), user);
+            this.plugin.getEventDispatcher().dispatchPlayerLoginProcess(e.getUniqueId(), e.getName(), user);
         } catch (Exception ex) {
             this.plugin.getLogger().severe("Exception occurred whilst loading data for " + e.getUniqueId() + " - " + e.getName());
             ex.printStackTrace();
@@ -115,7 +123,7 @@ public class BukkitConnectionListener extends AbstractConnectionListener impleme
             // deny the connection
             this.deniedAsyncLogin.add(e.getUniqueId());
             e.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, Message.LOADING_DATABASE_ERROR.asString(this.plugin.getLocaleManager()));
-            this.plugin.getEventFactory().handlePlayerLoginProcess(e.getUniqueId(), e.getName(), null);
+            this.plugin.getEventDispatcher().dispatchPlayerLoginProcess(e.getUniqueId(), e.getName(), null);
         }
     }
 
@@ -179,7 +187,7 @@ public class BukkitConnectionListener extends AbstractConnectionListener impleme
         // Care should be taken at this stage to ensure that async tasks which manipulate bukkit data check that the player is still online.
         try {
             // Make a new permissible for the user
-            LPPermissible lpPermissible = new LPPermissible(player, user, this.plugin);
+            LuckPermsPermissible lpPermissible = new LuckPermsPermissible(player, user, this.plugin);
 
             // Inject into the player
             PermissibleInjector.inject(player, lpPermissible);
@@ -219,7 +227,7 @@ public class BukkitConnectionListener extends AbstractConnectionListener impleme
 
         // perform unhooking from bukkit objects 1 tick later.
         // this allows plugins listening after us on MONITOR to still have intact permissions data
-        this.plugin.getBootstrap().getServer().getScheduler().runTaskLaterAsynchronously(this.plugin.getBootstrap(), () -> {
+        this.plugin.getBootstrap().getServer().getScheduler().runTaskLater(this.plugin.getBootstrap(), () -> {
             // Remove the custom permissible
             try {
                 PermissibleInjector.uninject(player, true);

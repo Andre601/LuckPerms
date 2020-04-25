@@ -27,6 +27,8 @@ package me.lucko.luckperms.common.util;
 
 import com.google.common.collect.Range;
 
+import org.checkerframework.checker.nullness.qual.NonNull;
+
 import java.util.function.Predicate;
 
 /**
@@ -35,26 +37,34 @@ import java.util.function.Predicate;
 public final class Predicates {
     private Predicates() {}
 
+    @SuppressWarnings("rawtypes")
     private static final Predicate FALSE = new Predicate() {
         @Override public boolean test(Object o) { return false; }
-        @Override public Predicate and(Predicate other) { return this; }
-        @Override public Predicate or(Predicate other) { return other; }
-        @Override public Predicate negate() { return TRUE; }
+        @Override
+        public @NonNull Predicate and(@NonNull Predicate other) { return this; }
+        @Override
+        public @NonNull Predicate or(@NonNull Predicate other) { return other; }
+        @Override
+        public @NonNull Predicate negate() { return TRUE; }
     };
+    @SuppressWarnings("rawtypes")
     private static final Predicate TRUE = new Predicate() {
         @Override public boolean test(Object o) { return true; }
-        @Override public Predicate and(Predicate other) { return other; }
-        @Override public Predicate or(Predicate other) { return this; }
-        @Override public Predicate negate() { return FALSE; }
+        @Override
+        public @NonNull Predicate and(@NonNull Predicate other) { return other; }
+        @Override
+        public @NonNull Predicate or(@NonNull Predicate other) { return this; }
+        @Override
+        public @NonNull Predicate negate() { return FALSE; }
     };
 
+    @SuppressWarnings("unchecked")
     public static <T> Predicate<T> alwaysFalse() {
-        //noinspection unchecked
         return FALSE;
     }
 
+    @SuppressWarnings("unchecked")
     public static <T> Predicate<T> alwaysTrue() {
-        //noinspection unchecked
         return TRUE;
     }
 

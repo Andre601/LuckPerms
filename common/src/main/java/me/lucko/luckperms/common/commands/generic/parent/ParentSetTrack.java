@@ -25,11 +25,10 @@
 
 package me.lucko.luckperms.common.commands.generic.parent;
 
-import me.lucko.luckperms.api.context.MutableContextSet;
-import me.lucko.luckperms.common.actionlog.ExtendedLogEntry;
+import me.lucko.luckperms.common.actionlog.LoggedAction;
 import me.lucko.luckperms.common.command.CommandResult;
 import me.lucko.luckperms.common.command.abstraction.CommandException;
-import me.lucko.luckperms.common.command.abstraction.SharedSubCommand;
+import me.lucko.luckperms.common.command.abstraction.GenericChildCommand;
 import me.lucko.luckperms.common.command.access.ArgumentPermissions;
 import me.lucko.luckperms.common.command.access.CommandPermission;
 import me.lucko.luckperms.common.command.tabcomplete.TabCompleter;
@@ -43,15 +42,19 @@ import me.lucko.luckperms.common.locale.message.Message;
 import me.lucko.luckperms.common.model.Group;
 import me.lucko.luckperms.common.model.PermissionHolder;
 import me.lucko.luckperms.common.model.Track;
-import me.lucko.luckperms.common.node.factory.NodeFactory;
+import me.lucko.luckperms.common.node.types.Inheritance;
 import me.lucko.luckperms.common.plugin.LuckPermsPlugin;
 import me.lucko.luckperms.common.sender.Sender;
 import me.lucko.luckperms.common.storage.misc.DataConstraints;
 import me.lucko.luckperms.common.util.Predicates;
 
+import net.luckperms.api.context.ImmutableContextSet;
+import net.luckperms.api.model.data.DataType;
+import net.luckperms.api.node.NodeType;
+
 import java.util.List;
 
-public class ParentSetTrack extends SharedSubCommand {
+public class ParentSetTrack extends GenericChildCommand {
     public ParentSetTrack(LocaleManager locale) {
         super(CommandSpec.PARENT_SET_TRACK.localize(locale), "settrack", CommandPermission.USER_PARENT_SET_TRACK, CommandPermission.GROUP_PARENT_SET_TRACK, Predicates.inRange(0, 1));
     }
@@ -96,7 +99,7 @@ public class ParentSetTrack extends SharedSubCommand {
             }
         }
 
-        MutableContextSet context = ArgumentParser.parseContext(2, args, plugin);
+        ImmutableContextSet context = ArgumentParser.parseContext(2, args, plugin).immutableCopy();
 
         Group group = StorageAssistant.loadGroup(groupName, sender, plugin, false);
         if (group == null) {
@@ -111,13 +114,13 @@ public class ParentSetTrack extends SharedSubCommand {
             return CommandResult.NO_PERMISSION;
         }
 
-        holder.removeIf(node -> node.isGroupNode() && node.getFullContexts().equals(context) && track.containsGroup(node.getGroupName()));
-        holder.setPermission(NodeFactory.buildGroupNode(group.getName()).withExtraContext(context).build());
+        holder.removeIf(DataType.NORMAL, context, NodeType.INHERITANCE.predicate(n -> track.containsGroup(n.getGroupName())), false);
+        holder.setNode(DataType.NORMAL, Inheritance.builder(group.getName()).withContext(context).build(), true);
 
         Message.SET_TRACK_PARENT_SUCCESS.send(sender, holder.getFormattedDisplayName(), track.getName(), group.getFormattedDisplayName(), MessageUtils.contextSetToString(plugin.getLocaleManager(), context));
 
-        ExtendedLogEntry.build().actor(sender).acted(holder)
-                .action("parent", "settrack", track.getName(), groupName, context)
+        LoggedAction.build().source(sender).target(holder)
+                .description("parent", "settrack", track.getName(), groupName, context)
                 .build().submit(plugin, sender);
 
         StorageAssistant.save(holder, sender, plugin);
@@ -129,6 +132,7 @@ public class ParentSetTrack extends SharedSubCommand {
         return TabCompleter.create()
                 .at(0, TabCompletions.tracks(plugin))
                 .at(1, TabCompletions.groups(plugin))
+                .from(2, TabCompletions.contexts(plugin))
                 .complete(args);
     }
 }
